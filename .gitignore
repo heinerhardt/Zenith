@@ -1,0 +1,130 @@
+# Zenith PDF Chatbot - Git ignore file
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+temp_pdfs/
+*.tmp
+*.temp
+
+# Data directories (optional - uncomment if you don't want to track data)
+# data/
+# qdrant_storage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# PyCharm
+.idea/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Streamlit
+.streamlit/
+
+# Docker
+.dockerignore
+
+# Local development
+local_test/
+playground/
+scratch/
+
+# API keys and secrets (safety net)
+*key*
+*secret*
+*token*
+*password*
+config.json
+secrets.json
+
+# Large files that shouldn't be committed
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+
+# Backup files
+*.bak
+*.backup
+
+# Distribution files
+*.tar.gz
+*.zip
+
+# Node.js (if any frontend components are added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

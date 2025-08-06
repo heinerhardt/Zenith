@@ -1,0 +1,1 @@
+# Core module for PDF processing, vector storage, and chat functionality

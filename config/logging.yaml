@@ -1,0 +1,76 @@
+version: '4.0'
+
+disable_existing_loggers: false
+
+formatters:
+  default:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+  
+  detailed:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+  
+  json:
+    format: '{"timestamp": "%(asctime)s", "logger": "%(name)s", "level": "%(levelname)s", "function": "%(funcName)s", "line": %(lineno)d, "message": "%(message)s"}'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: default
+    stream: ext://sys.stdout
+  
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: detailed
+    filename: logs/zenith.log
+    maxBytes: 100000000  # 100MB
+    backupCount: 5
+    encoding: utf8
+  
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: detailed
+    filename: logs/zenith_errors.log
+    maxBytes: 50000000  # 50MB
+    backupCount: 3
+    encoding: utf8
+
+loggers:
+  src:
+    level: DEBUG
+    handlers: [console, file, error_file]
+    propagate: false
+  
+  langchain:
+    level: INFO
+    handlers: [console, file]
+    propagate: false
+  
+  qdrant_client:
+    level: INFO
+    handlers: [console, file]
+    propagate: false
+  
+  openai:
+    level: WARNING
+    handlers: [console, file]
+    propagate: false
+  
+  uvicorn:
+    level: INFO
+    handlers: [console, file]
+    propagate: false
+  
+  streamlit:
+    level: INFO
+    handlers: [console, file]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console, file, error_file]

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: zenith-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage:z
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+    networks:
+      - zenith-network
+
+  # Optional: Redis for caching (if needed in future)
+  redis:
+    image: redis:alpine
+    container_name: zenith-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - zenith-network
+    profiles:
+      - cache
+
+networks:
+  zenith-network:
+    driver: bridge
+
+volumes:
+  redis_data:
