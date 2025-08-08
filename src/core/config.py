@@ -54,6 +54,22 @@ class Settings(BaseSettings):
     enable_metrics: bool = Field(default=True, env="ENABLE_METRICS")
     metrics_port: int = Field(default=8502, env="METRICS_PORT")
     
+    # MinIO Configuration (optional - for MinIO integration)
+    minio_endpoint: Optional[str] = Field(default=None, env="MINIO_ENDPOINT")
+    minio_access_key: Optional[str] = Field(default=None, env="MINIO_ACCESS_KEY")
+    minio_secret_key: Optional[str] = Field(default=None, env="MINIO_SECRET_KEY")
+    minio_secure: bool = Field(default=False, env="MINIO_SECURE")
+    minio_region: str = Field(default="us-east-1", env="MINIO_REGION")
+    
+    # Batch Processing Configuration (optional)
+    processing_timeout_minutes: int = Field(default=30, env="PROCESSING_TIMEOUT_MINUTES")
+    max_concurrent_downloads: int = Field(default=5, env="MAX_CONCURRENT_DOWNLOADS")
+    auto_cleanup_temp_files: bool = Field(default=True, env="AUTO_CLEANUP_TEMP_FILES")
+    async_processing: bool = Field(default=True, env="ASYNC_PROCESSING")
+    enable_processing_metrics: bool = Field(default=True, env="ENABLE_PROCESSING_METRICS")
+    log_processing_details: bool = Field(default=True, env="LOG_PROCESSING_DETAILS")
+    processing_log_level: str = Field(default="INFO", env="PROCESSING_LOG_LEVEL")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

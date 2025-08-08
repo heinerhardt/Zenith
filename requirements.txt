@@ -44,3 +44,24 @@ flake8>=6.0.0
 # File handling
 pathlib2>=2.3.7
 watchdog>=3.0.0
+
+# Additional MinIO Integration Dependencies
+# Add these to your main requirements.txt file
+
+# MinIO client
+minio>=7.2.0
+
+# Async file operations
+aiofiles>=23.2.0
+
+# Progress tracking and UI enhancements
+tqdm>=4.66.0
+rich>=13.7.0
+
+# Background task processing (optional)
+celery>=5.3.0
+redis>=5.0.0
+
+# Additional data processing utilities
+#fnmatch2>=1.0.2
+fnmatch2==0.0.8

@@ -23,6 +23,13 @@ from src.core.chat_engine import ChatEngine
 from src.utils.helpers import format_file_size, format_duration, ensure_directory_exists
 from src.utils.logger import get_logger
 
+# MinIO Integration
+try:
+    from minio_simple_integration import render_minio_tabs, MINIO_AVAILABLE
+except ImportError:
+    MINIO_AVAILABLE = False
+    render_minio_tabs = None
+
 # Initialize logger
 logger = get_logger(__name__)
 
@@ -130,7 +137,6 @@ class ZenithStreamlitApp:
         
         # OpenAI Configuration
         st.sidebar.markdown("#### OpenAI Settings")
-        print(config.openai_api_key)
         openai_api_key = st.sidebar.text_input(
             "OpenAI API Key",
             type="password",
@@ -603,6 +609,19 @@ class ZenithStreamlitApp:
         
         with tab2:
             self.render_chat_section()
+        
+        # Add MinIO functionality if available
+        if MINIO_AVAILABLE and render_minio_tabs:
+            st.divider()
+            st.subheader("🗄️ MinIO Integration")
+            st.write("Process PDF documents directly from MinIO buckets")
+            render_minio_tabs()
+        elif not MINIO_AVAILABLE:
+            st.divider()
+            with st.expander("🗄️ MinIO Integration (Not Available)"):
+                st.info("MinIO integration is not available. To enable it:")
+                st.code("pip install minio>=7.2.0")
+                st.write("Then restart the application to access MinIO functionality.")
 
 
 def main():
