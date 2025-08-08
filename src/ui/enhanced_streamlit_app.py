@@ -23,6 +23,7 @@ from src.core.enhanced_vector_store import UserVectorStore
 from src.core.enhanced_chat_engine import EnhancedChatEngine
 from src.core.pdf_processor import PDFProcessor
 from src.core.settings_manager import get_settings_manager
+from src.core.chat_history import get_chat_history_manager, ChatSession, ChatMessage
 from src.auth.auth_manager import (
     AuthenticationManager, init_auth_session, get_current_user_from_session,
     require_authentication, require_admin, logout_user_session
@@ -30,6 +31,7 @@ from src.auth.auth_manager import (
 from src.auth.models import UserRole, UserRegistrationRequest, UserLoginRequest
 from src.utils.helpers import format_file_size, format_duration
 from src.utils.logger import get_logger
+from datetime import datetime
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -144,6 +146,12 @@ class ZenithAuthenticatedApp:
         if 'chat_engine' not in st.session_state:
             st.session_state.chat_engine = None
         
+        # Chat history components
+        if 'chat_history_manager' not in st.session_state:
+            st.session_state.chat_history_manager = get_chat_history_manager()
+        if 'current_session' not in st.session_state:
+            st.session_state.current_session = None
+        
         # Processing state
         if 'documents_processed' not in st.session_state:
             st.session_state.documents_processed = False
@@ -181,20 +189,37 @@ class ZenithAuthenticatedApp:
     
     def render_login_page(self):
         """Render login/registration page"""
-        st.markdown('<h1 class="main-header">🔐 Zenith Login</h1>', unsafe_allow_html=True)
+        # Hide sidebar on login page
+        st.markdown("""
+        <style>
+        .css-1d391kg {display: none}
+        .css-1rs6os {display: none}
+        .css-17eq0hr {display: none}
+        [data-testid="stSidebar"] {display: none}
+        .stSidebar {display: none}
+        section[data-testid="stSidebar"] {display: none}
+        </style>
+        """, unsafe_allow_html=True)
         
-        # Create tabs for login and registration
-        tab1, tab2 = st.tabs(["Login", "Register"])
+        # Center the login form
+        col1, col2, col3 = st.columns([1, 2, 1])
         
-        with tab1:
-            self.render_login_form()
-        
-        with tab2:
-            self.render_registration_form()
+        with col2:
+            st.markdown('<h1 class="main-header">📚 Zenith PDF Chatbot</h1>', unsafe_allow_html=True)
+            st.markdown('<p style="text-align: center; color: #666; margin-bottom: 2rem;">Secure Authentication Required</p>', unsafe_allow_html=True)
+            
+            # Create tabs for login and registration
+            tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
+            
+            with tab1:
+                self.render_login_form()
+            
+            with tab2:
+                self.render_registration_form()
     
     def render_login_form(self):
         """Render login form"""
-        st.markdown("### Login to Your Account")
+        st.markdown("### 🔐 Login to Your Account")
         
         # Check if auth manager is properly initialized
         if not st.session_state.get('auth_manager'):
@@ -204,9 +229,18 @@ class ZenithAuthenticatedApp:
             return
         
         with st.form("login_form"):
-            username_or_email = st.text_input("Username or Email")
-            password = st.text_input("Password", type="password")
-            submit_button = st.form_submit_button("Login")
+            username_or_email = st.text_input(
+                "Username or Email",
+                placeholder="Enter your username or email address"
+            )
+            password = st.text_input(
+                "Password", 
+                type="password",
+                placeholder="Enter your password"
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit_button = st.form_submit_button("🔐 Login", use_container_width=True, type="primary")
             
             if submit_button:
                 if username_or_email and password:
@@ -238,16 +272,16 @@ class ZenithAuthenticatedApp:
                                     'full_name': user.full_name
                                 }
                             
-                            st.success("Login successful! Redirecting...")
+                            st.success("✅ Login successful! Redirecting...")
                             time.sleep(1)
                             st.rerun()
                         else:
-                            st.error(message)
+                            st.error(f"❌ {message}")
                     except Exception as e:
-                        st.error(f"Login error: {str(e)}")
+                        st.error(f"❌ Login error: {str(e)}")
                         logger.error(f"Login error: {e}")
                 else:
-                    st.error("Please enter both username/email and password")
+                    st.error("⚠️ Please enter both username/email and password")
     
     def render_registration_form(self):
         """Render registration form"""
@@ -370,6 +404,9 @@ class ZenithAuthenticatedApp:
                 vector_store=st.session_state.vector_store
             )
         
+        # Render sidebar with chat history
+        self.render_sidebar_info()
+        
         # Create tabs for file upload and chat
         tab1, tab2 = st.tabs(["📁 Upload Documents", "💬 Chat"])
         
@@ -378,6 +415,182 @@ class ZenithAuthenticatedApp:
         
         with tab2:
             self.render_chat_tab()
+    
+    def render_sidebar_info(self):
+        """Render sidebar information"""
+        st.sidebar.markdown("### 📚 Zenith PDF Chatbot")
+        
+        # Chat History Section
+        self.render_chat_history_sidebar()
+        
+        # Simple document info (only if documents are processed)
+        if st.session_state.documents_processed and st.session_state.file_stats:
+            st.sidebar.markdown("### 📄 Document Info")
+            stats = st.session_state.file_stats
+            st.sidebar.markdown(f"**Files:** {len(stats.get('processed_files', []))}")
+            st.sidebar.markdown(f"**Pages:** {stats.get('total_documents', 0)}")
+            st.sidebar.markdown(f"**Chunks:** {stats.get('total_chunks', 0)}")
+        
+        # Optional: Show document statistics for admin users only
+        user_info = st.session_state.get('user_info', {})
+        if user_info.get('role') == 'administrator':
+            if st.sidebar.checkbox("Show Advanced Stats", value=False):
+                if st.session_state.chat_engine:
+                    stats = st.session_state.chat_engine.get_user_document_stats()
+                    st.sidebar.markdown("### 📊 Document Statistics")
+                    st.sidebar.json(stats)
+    
+    def render_chat_history_sidebar(self):
+        """Render chat history in sidebar"""
+        st.sidebar.markdown("### 💬 Chat History")
+        
+        user_id = st.session_state.user_info.get('id')
+        if not user_id:
+            return
+        
+        # New Chat button
+        if st.sidebar.button("🆕 New Chat", use_container_width=True, type="primary"):
+            self.start_new_chat_session()
+        
+        # Get recent sessions
+        try:
+            recent_sessions = st.session_state.chat_history_manager.get_user_sessions(user_id, limit=5)
+            
+            if recent_sessions:
+                st.sidebar.markdown("**Recent Sessions:**")
+                
+                for i, session in enumerate(recent_sessions):
+                    # Create a shortened title for display
+                    display_title = session.title
+                    if len(display_title) > 25:
+                        display_title = display_title[:22] + "..."
+                    
+                    # Show message count and date
+                    msg_count = session.get_message_count()
+                    date_str = session.updated_at.strftime("%m/%d")
+                    
+                    # Check if this is the current session
+                    is_current = (st.session_state.current_session and 
+                                st.session_state.current_session.session_id == session.session_id)
+                    
+                    # Container for each session
+                    with st.sidebar.container():
+                        col1, col2 = st.columns([4, 1])
+                        
+                        with col1:
+                            button_type = "primary" if is_current else "secondary"
+                            if st.button(
+                                f"💬 {display_title}",
+                                key=f"session_{session.session_id}",
+                                use_container_width=True,
+                                type=button_type,
+                                help=f"{msg_count} messages, last: {date_str}"
+                            ):
+                                self.load_chat_session(session.session_id)
+                        
+                        with col2:
+                            if st.button("🗑️", 
+                                       key=f"delete_{session.session_id}", 
+                                       help="Delete session",
+                                       type="secondary"):
+                                if st.session_state.chat_history_manager.delete_session(session.session_id, user_id):
+                                    # If we deleted the current session, start a new one
+                                    if is_current:
+                                        st.session_state.current_session = None
+                                        self.start_new_chat_session()
+                                    else:
+                                        st.rerun()
+                        
+                        # Show small session info
+                        st.sidebar.caption(f"📝 {msg_count} msgs • 📅 {date_str}")
+                        
+                        if i < len(recent_sessions) - 1:
+                            st.sidebar.markdown("---")
+            else:
+                st.sidebar.info("💭 No chat history yet.\nClick 'New Chat' to start!")
+                
+        except Exception as e:
+            st.sidebar.error(f"Error loading chat history: {str(e)}")
+    
+    def start_new_chat_session(self):
+        """Start a new chat session"""
+        user_id = st.session_state.user_info.get('id')
+        if not user_id:
+            return
+        
+        # Create new session
+        context = None
+        if st.session_state.documents_processed and st.session_state.file_stats:
+            files = st.session_state.file_stats.get('processed_files', [])
+            if files:
+                context = f"Documents: {', '.join(files[:3])}"
+                if len(files) > 3:
+                    context += f" and {len(files) - 3} more"
+        
+        session = st.session_state.chat_history_manager.create_session(
+            user_id=user_id,
+            title=f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            document_context=context
+        )
+        
+        st.session_state.current_session = session
+        st.session_state.chat_history = []  # Clear current chat display
+        
+        # Clean up old sessions (keep only 5 most recent)
+        st.session_state.chat_history_manager.cleanup_old_sessions(user_id, keep_count=5)
+        
+        st.rerun()
+    
+    def load_chat_session(self, session_id: str):
+        """Load an existing chat session"""
+        user_id = st.session_state.user_info.get('id')
+        if not user_id:
+            return
+        
+        session = st.session_state.chat_history_manager.get_session(session_id, user_id)
+        if session:
+            st.session_state.current_session = session
+            
+            # Convert session messages to chat history format
+            st.session_state.chat_history = []
+            for msg in session.messages:
+                st.session_state.chat_history.append({
+                    'role': msg.role,
+                    'content': msg.content,
+                    'timestamp': msg.timestamp
+                })
+            
+            st.rerun()
+    
+    def add_message_to_current_session(self, role: str, content: str):
+        """Add a message to the current session"""
+        user_id = st.session_state.user_info.get('id')
+        if not user_id:
+            return
+        
+        # Ensure we have a current session
+        if not st.session_state.current_session:
+            self.start_new_chat_session()
+        
+        # Add message to session
+        if st.session_state.current_session:
+            success = st.session_state.chat_history_manager.add_message_to_session(
+                st.session_state.current_session.session_id,
+                user_id,
+                role,
+                content
+            )
+            
+            if success:
+                # Update local session object
+                st.session_state.current_session.add_message(role, content)
+                
+                # Update chat display
+                st.session_state.chat_history.append({
+                    'role': role,
+                    'content': content,
+                    'timestamp': datetime.now()
+                })
     
     def render_file_upload_interface(self):
         """Render file upload interface for chat users"""
@@ -571,11 +784,8 @@ class ZenithAuthenticatedApp:
     
     def handle_user_input(self, user_input: str, has_documents: bool):
         """Handle user input and generate response"""
-        # Add user message to history
-        st.session_state.chat_history.append({
-            "role": "user",
-            "content": user_input
-        })
+        # Add user message to chat history and session
+        self.add_message_to_current_session("user", user_input)
         
         try:
             with st.spinner("Thinking..."):
@@ -592,28 +802,42 @@ class ZenithAuthenticatedApp:
                         "answer": "I'm sorry, but the chat system is not properly initialized. Please try refreshing the page.",
                         "source_documents": []
                     }
-            
-            # Add assistant response to history
-            assistant_message = {
-                "role": "assistant",
-                "content": response["answer"],
-                "sources": response.get("source_documents", [])
-            }
-            
-            st.session_state.chat_history.append(assistant_message)
-            
-            # Rerun to display new messages
-            st.rerun()
-            
+                
+                # Add assistant response to chat history and session
+                assistant_message = {
+                    "role": "assistant",
+                    "content": response.get("answer", "I couldn't generate a response."),
+                    "sources": []
+                }
+                
+                # Process source documents
+                if response.get("source_documents"):
+                    for doc in response["source_documents"]:
+                        source_info = {
+                            "content": doc.page_content[:200] + "...",
+                            "filename": doc.metadata.get("filename", "Unknown file"),
+                            "page": doc.metadata.get("page", "Unknown page")
+                        }
+                        assistant_message["sources"].append(source_info)
+                
+                # Add to session and display
+                self.add_message_to_current_session("assistant", assistant_message["content"])
+                
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            logger.error(f"Chat error: {e}")
+            error_message = f"Sorry, I encountered an error: {str(e)}"
+            self.add_message_to_current_session("assistant", error_message)
+            logger.error(f"Error in chat: {e}")
+        
+        # Force refresh to show new messages
+        st.rerun()
     
     def clear_chat_history(self):
-        """Clear chat history"""
+        """Clear current chat history and start new session"""
         st.session_state.chat_history = []
+        st.session_state.current_session = None
         if st.session_state.chat_engine:
             st.session_state.chat_engine.clear_conversation_history()
+        self.start_new_chat_session()
         st.rerun()
     
     def show_document_stats(self):
