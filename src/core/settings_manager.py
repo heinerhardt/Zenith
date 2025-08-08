@@ -427,6 +427,38 @@ class SettingsManager:
         except Exception as e:
             logger.error(f"Error importing settings: {e}")
             return False, f"Import failed: {str(e)}"
+    
+    def test_openai_connection(self, api_key: str) -> tuple[bool, str]:
+        """Test OpenAI API connection"""
+        try:
+            import openai
+            
+            # Create temporary client
+            client = openai.OpenAI(api_key=api_key)
+            
+            # Test with a simple API call
+            response = client.models.list()
+            models = [model.id for model in response.data]
+            
+            return True, f"Connection successful! Found {len(models)} models available."
+        
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"
+    
+    def test_ollama_connection(self, endpoint: str) -> tuple[bool, str]:
+        """Test Ollama connection"""
+        try:
+            from src.core.ollama_integration import OllamaClient
+            
+            client = OllamaClient(endpoint)
+            if client.health_check():
+                models = client.list_models()
+                return True, f"Connection successful! Found {len(models)} models available."
+            else:
+                return False, "Ollama server is not responding"
+        
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"
 
 
 # Global instance

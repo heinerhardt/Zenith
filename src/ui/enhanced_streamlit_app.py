@@ -34,6 +34,17 @@ from src.utils.logger import get_logger
 # Initialize logger
 logger = get_logger(__name__)
 
+def format_file_size(size_bytes: int) -> str:
+    """Format file size in human readable format"""
+    if size_bytes == 0:
+        return "0 B"
+    size_names = ["B", "KB", "MB", "GB"]
+    i = 0
+    while size_bytes >= 1024 and i < len(size_names) - 1:
+        size_bytes /= 1024.0
+        i += 1
+    return f"{size_bytes:.1f} {size_names[i]}"
+
 # Page configuration
 st.set_page_config(
     page_title="Zenith PDF Chatbot",
@@ -658,8 +669,8 @@ class ZenithAuthenticatedApp:
             st.rerun()
         
         # Admin tabs
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "System Settings", "AI Models", "User Management", "System Status"
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "System Settings", "AI Models", "User Management", "System Status", "MinIO Processor"
         ])
         
         with tab1:
@@ -673,6 +684,9 @@ class ZenithAuthenticatedApp:
         
         with tab4:
             self.render_system_status()
+        
+        with tab5:
+            self.render_minio_processor()
     
     def render_system_settings(self):
         """Render system settings configuration"""
@@ -758,11 +772,254 @@ class ZenithAuthenticatedApp:
     def render_ai_model_settings(self):
         """Render AI model configuration"""
         st.markdown("### AI Model Configuration")
-        st.info("Configure your preferred AI providers and models")
         
-        # This is a simplified version - full implementation would include
-        # all the model configuration options
-        st.markdown("Coming soon: Full AI model configuration interface")
+        settings_manager = get_settings_manager()
+        current_settings = settings_manager.get_settings()
+        
+        # Provider selection
+        st.markdown("#### Provider Selection")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            chat_provider = st.selectbox(
+                "Chat Provider",
+                options=["openai", "ollama"],
+                index=0 if current_settings.preferred_chat_provider == "openai" else 1,
+                format_func=lambda x: "OpenAI" if x == "openai" else "Ollama (Local)",
+                help="Choose between cloud OpenAI or local Ollama for chat"
+            )
+        
+        with col2:
+            embedding_provider = st.selectbox(
+                "Embedding Provider",
+                options=["openai", "ollama"],
+                index=0 if current_settings.preferred_embedding_provider == "openai" else 1,
+                format_func=lambda x: "OpenAI" if x == "openai" else "Ollama (Local)",
+                help="Choose between cloud OpenAI or local Ollama for embeddings"
+            )
+        
+        # OpenAI Configuration
+        st.markdown("#### OpenAI Configuration")
+        with st.expander("OpenAI Settings", expanded=chat_provider == "openai"):
+            openai_api_key = st.text_input(
+                "OpenAI API Key",
+                type="password",
+                value="***" if current_settings.openai_api_key else "",
+                help="Your OpenAI API key from https://platform.openai.com/api-keys"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                openai_chat_model = st.selectbox(
+                    "Chat Model",
+                    options=["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"],
+                    index=self._get_model_index(current_settings.openai_chat_model, 
+                                              ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"]),
+                    help="OpenAI model for chat responses"
+                )
+            
+            with col2:
+                openai_embedding_model = st.selectbox(
+                    "Embedding Model",
+                    options=["text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"],
+                    index=self._get_model_index(current_settings.openai_embedding_model,
+                                              ["text-embedding-ada-002", "text-embedding-3-small", "text-embedding-3-large"]),
+                    help="OpenAI model for document embeddings"
+                )
+            
+            if st.button("Test OpenAI Connection"):
+                if openai_api_key and openai_api_key != "***":
+                    success, message = settings_manager.test_openai_connection(openai_api_key)
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+                else:
+                    st.warning("Please enter an API key to test")
+        
+        # Ollama Configuration
+        st.markdown("#### Ollama Configuration")
+        with st.expander("Ollama Settings", expanded=chat_provider == "ollama"):
+            ollama_enabled = st.checkbox(
+                "Enable Ollama",
+                value=current_settings.ollama_enabled,
+                help="Enable local Ollama models"
+            )
+            
+            ollama_endpoint = st.text_input(
+                "Ollama Endpoint",
+                value=current_settings.ollama_endpoint,
+                help="Ollama server endpoint (e.g., http://localhost:11434)"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                ollama_chat_model = st.text_input(
+                    "Chat Model",
+                    value=current_settings.ollama_chat_model,
+                    help="Ollama chat model name (e.g., llama2, mistral, codellama)"
+                )
+                
+                # Show available chat models if connected
+                if st.button("List Available Chat Models"):
+                    try:
+                        from src.core.ollama_integration import OllamaClient
+                        client = OllamaClient(ollama_endpoint)
+                        if client.health_check():
+                            models = client.list_models()
+                            if models:
+                                st.write("**Available Models:**")
+                                for model in models:
+                                    st.write(f"- {model.name} ({format_file_size(model.size)})")
+                            else:
+                                st.info("No models found. Pull models with: `ollama pull model_name`")
+                        else:
+                            st.error("Cannot connect to Ollama server")
+                    except Exception as e:
+                        st.error(f"Error listing models: {e}")
+            
+            with col2:
+                ollama_embedding_model = st.text_input(
+                    "Embedding Model",
+                    value=current_settings.ollama_embedding_model,
+                    help="Ollama embedding model name (e.g., nomic-embed-text)"
+                )
+                
+                # Pull model functionality
+                model_to_pull = st.text_input(
+                    "Pull New Model",
+                    placeholder="Enter model name (e.g., llama2, mistral)",
+                    help="Download a new model from Ollama registry"
+                )
+                
+                if st.button("Pull Model") and model_to_pull:
+                    try:
+                        from src.core.ollama_integration import OllamaClient
+                        client = OllamaClient(ollama_endpoint)
+                        
+                        with st.spinner(f"Pulling model {model_to_pull}..."):
+                            success = client.pull_model(model_to_pull)
+                        
+                        if success:
+                            st.success(f"Successfully pulled {model_to_pull}")
+                        else:
+                            st.error(f"Failed to pull {model_to_pull}")
+                    except Exception as e:
+                        st.error(f"Error pulling model: {e}")
+            
+            if st.button("Test Ollama Connection"):
+                success, message = settings_manager.test_ollama_connection(ollama_endpoint)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        
+        # Qdrant Configuration
+        st.markdown("#### Vector Database Configuration")
+        with st.expander("Qdrant Settings"):
+            qdrant_mode = st.selectbox(
+                "Qdrant Mode",
+                options=["local", "cloud"],
+                index=0 if current_settings.qdrant_mode == "local" else 1,
+                help="Use local Qdrant instance or cloud service"
+            )
+            
+            if qdrant_mode == "local":
+                col1, col2 = st.columns(2)
+                with col1:
+                    qdrant_host = st.text_input(
+                        "Host",
+                        value=current_settings.qdrant_local_host,
+                        help="Qdrant server host (e.g., localhost)"
+                    )
+                
+                with col2:
+                    qdrant_port = st.number_input(
+                        "Port",
+                        min_value=1,
+                        max_value=65535,
+                        value=current_settings.qdrant_local_port,
+                        help="Qdrant server port (default: 6333)"
+                    )
+                
+                st.info("💡 To run Qdrant locally: `docker run -p 6333:6333 qdrant/qdrant`")
+                
+            else:
+                qdrant_cloud_url = st.text_input(
+                    "Cloud URL",
+                    value=current_settings.qdrant_cloud_url or "",
+                    help="Qdrant cloud cluster URL"
+                )
+                
+                qdrant_api_key = st.text_input(
+                    "API Key",
+                    type="password",
+                    value="***" if current_settings.qdrant_cloud_api_key else "",
+                    help="Qdrant cloud API key"
+                )
+            
+            qdrant_collection = st.text_input(
+                "Collection Name",
+                value=current_settings.qdrant_collection_name,
+                help="Name for the document collection"
+            )
+            
+            if st.button("Test Qdrant Connection"):
+                try:
+                    from src.core.qdrant_manager import QdrantManager
+                    test_manager = QdrantManager(qdrant_mode)
+                    if test_manager.health_check():
+                        collections = test_manager.get_client().get_collections()
+                        st.success(f"Qdrant connection successful! Found {len(collections.collections)} collections")
+                    else:
+                        st.error("Qdrant connection failed")
+                except Exception as e:
+                    st.error(f"Qdrant test failed: {str(e)}")
+        
+        # Save Settings Button
+        st.markdown("---")
+        if st.button("💾 Save AI Model Settings", type="primary"):
+            updates = {
+                "preferred_chat_provider": chat_provider,
+                "preferred_embedding_provider": embedding_provider,
+                "ollama_enabled": ollama_enabled,
+                "ollama_endpoint": ollama_endpoint,
+                "ollama_chat_model": ollama_chat_model,
+                "ollama_embedding_model": ollama_embedding_model,
+                "openai_chat_model": openai_chat_model,
+                "openai_embedding_model": openai_embedding_model,
+                "qdrant_mode": qdrant_mode,
+                "qdrant_collection_name": qdrant_collection
+            }
+            
+            # Add API keys only if they were changed
+            if openai_api_key and openai_api_key != "***":
+                updates["openai_api_key"] = openai_api_key
+            
+            if qdrant_mode == "local":
+                updates.update({
+                    "qdrant_local_host": qdrant_host,
+                    "qdrant_local_port": qdrant_port
+                })
+            else:
+                if qdrant_cloud_url:
+                    updates["qdrant_cloud_url"] = qdrant_cloud_url
+                if qdrant_api_key and qdrant_api_key != "***":
+                    updates["qdrant_cloud_api_key"] = qdrant_api_key
+            
+            success, message = settings_manager.update_settings(updates)
+            if success:
+                st.success(message)
+                st.info("💡 Restart the application for some changes to take effect.")
+            else:
+                st.error(message)
+    
+    def _get_model_index(self, current_model: str, model_list: list) -> int:
+        """Get index of current model in list"""
+        try:
+            return model_list.index(current_model)
+        except ValueError:
+            return 0
     
     def render_user_management(self):
         """Render user management interface"""
@@ -793,6 +1050,211 @@ class ZenithAuthenticatedApp:
         
         except Exception as e:
             st.error(f"Error managing users: {e}")
+    
+    def render_minio_processor(self):
+        """Render MinIO processor interface for admins"""
+        st.markdown("### 🗄️ MinIO Document Processor")
+        st.info("Process PDF documents directly from MinIO buckets (Admin Only)")
+        
+        # Check if MinIO is available
+        try:
+            from src.utils.minio_helpers import MinIOClient
+            minio_available = True
+        except ImportError:
+            minio_available = False
+        
+        if not minio_available:
+            st.error("❌ MinIO not available")
+            st.info("Install MinIO: `pip install minio>=7.2.0`")
+            return
+        
+        # MinIO Configuration
+        with st.expander("⚙️ MinIO Configuration", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                minio_endpoint = st.text_input(
+                    "MinIO Endpoint", 
+                    value="10.16.100.2:9000",
+                    help="MinIO server endpoint"
+                )
+                minio_access_key = st.text_input(
+                    "Access Key", 
+                    value="minioadmin",
+                    help="MinIO access key"
+                )
+            
+            with col2:
+                minio_secret_key = st.text_input(
+                    "Secret Key", 
+                    value="minioadmin",
+                    type="password",
+                    help="MinIO secret key"
+                )
+                minio_secure = st.checkbox(
+                    "Use HTTPS", 
+                    value=False,
+                    help="Use secure HTTPS connection"
+                )
+            
+            if st.button("Test MinIO Connection"):
+                try:
+                    client = MinIOClient(
+                        endpoint=minio_endpoint,
+                        access_key=minio_access_key,
+                        secret_key=minio_secret_key,
+                        secure=minio_secure
+                    )
+                    
+                    buckets = client.list_buckets()
+                    st.success(f"✅ Connected successfully! Found {len(buckets)} buckets")
+                    
+                    if buckets:
+                        st.markdown("**Available Buckets:**")
+                        for bucket in buckets:
+                            st.markdown(f"- {bucket}")
+                
+                except Exception as e:
+                    st.error(f"❌ Connection failed: {str(e)}")
+        
+        # PDF Processing from MinIO
+        st.markdown("### 📄 Process PDFs from MinIO")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            bucket_name = st.text_input(
+                "Bucket Name",
+                value="documents",
+                help="Name of the MinIO bucket containing PDFs"
+            )
+        
+        with col2:
+            pdf_prefix = st.text_input(
+                "PDF Prefix/Path",
+                value="",
+                help="Optional prefix to filter PDFs (e.g., 'pdfs/' or 'documents/2024/')"
+            )
+        
+        if st.button("🔍 List PDFs from MinIO"):
+            if bucket_name:
+                try:
+                    client = MinIOClient(
+                        endpoint=minio_endpoint,
+                        access_key=minio_access_key,
+                        secret_key=minio_secret_key,
+                        secure=minio_secure
+                    )
+                    
+                    with st.spinner("Connecting to MinIO and listing PDFs..."):
+                        pdf_files = client.list_pdf_files(bucket_name, pdf_prefix)
+                    
+                    if pdf_files:
+                        st.success(f"Found {len(pdf_files)} PDF files")
+                        
+                        # Show file list
+                        selected_files = st.multiselect(
+                            "Select PDFs to process:",
+                            options=pdf_files,
+                            default=pdf_files[:5] if len(pdf_files) <= 5 else pdf_files[:3],
+                            help="Select which PDF files to download and process"
+                        )
+                        
+                        if selected_files and st.button("🚀 Process Selected PDFs", type="primary"):
+                            self.process_minio_pdfs(client, bucket_name, selected_files)
+                    else:
+                        st.warning("No PDF files found in the specified bucket/path")
+                
+                except Exception as e:
+                    st.error(f"Error listing PDFs: {str(e)}")
+            else:
+                st.error("Please enter a bucket name")
+    
+    def process_minio_pdfs(self, minio_client, bucket_name: str, pdf_files: List[str]):
+        """Process PDFs from MinIO"""
+        try:
+            # Initialize processing components
+            if not st.session_state.pdf_processor:
+                st.session_state.pdf_processor = PDFProcessor()
+            
+            if not st.session_state.vector_store:
+                user_id = st.session_state.user_info.get('id')
+                st.session_state.vector_store = UserVectorStore(user_id=user_id)
+            
+            if not st.session_state.chat_engine:
+                user_id = st.session_state.user_info.get('id')
+                st.session_state.chat_engine = EnhancedChatEngine(
+                    user_id=user_id,
+                    vector_store=st.session_state.vector_store
+                )
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            documents = []
+            processed_files = []
+            
+            for i, pdf_file in enumerate(pdf_files):
+                status_text.text(f"Processing {pdf_file}...")
+                progress_bar.progress((i + 1) / len(pdf_files))
+                
+                try:
+                    # Download and process PDF from MinIO
+                    temp_path = minio_client.download_file(bucket_name, pdf_file)
+                    
+                    # Process the downloaded PDF
+                    pdf_docs = st.session_state.pdf_processor.load_pdfs_from_directory(
+                        str(temp_path.parent)
+                    )
+                    
+                    if pdf_docs:
+                        documents.extend(pdf_docs)
+                        processed_files.append(pdf_file)
+                    
+                    # Clean up temp file
+                    if temp_path.exists():
+                        temp_path.unlink()
+                
+                except Exception as e:
+                    st.error(f"Error processing {pdf_file}: {str(e)}")
+            
+            if documents:
+                status_text.text("Creating text chunks...")
+                chunks = st.session_state.pdf_processor.split_documents(documents)
+                
+                status_text.text("Storing in vector database...")
+                document_id = str(uuid.uuid4())
+                success = st.session_state.vector_store.add_documents(chunks, document_id)
+                
+                if success:
+                    # Update session state
+                    st.session_state.documents_processed = True
+                    st.session_state.processed_files.extend(processed_files)
+                    st.session_state.file_stats = {
+                        'total_documents': len(documents),
+                        'total_chunks': len(chunks),
+                        'processed_files': processed_files,
+                        'source': 'MinIO'
+                    }
+                    
+                    progress_bar.progress(1.0)
+                    status_text.text("✅ Processing complete!")
+                    
+                    st.success(f"Successfully processed {len(processed_files)} PDFs from MinIO!")
+                    st.markdown(f"**Processed:** {len(documents)} pages into {len(chunks)} chunks")
+                    
+                    # Show processed files
+                    with st.expander("View processed files"):
+                        for filename in processed_files:
+                            st.markdown(f"- {filename}")
+                else:
+                    st.error("Failed to store documents in vector database")
+            else:
+                st.warning("No documents were successfully processed")
+        
+        except Exception as e:
+            st.error(f"Error during MinIO processing: {str(e)}")
+            logger.error(f"MinIO processing error: {e}")
     
     def render_system_status(self):
         """Render system status and health checks"""
