@@ -1,0 +1,431 @@
+"""
+Enhanced Chat Engine for Zenith - Supports multiple AI providers and user context
+"""
+
+from typing import List, Dict, Any, Optional, Union
+from dataclasses import dataclass
+from datetime import datetime
+
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.documents import Document
+
+from .config import config
+from .enhanced_vector_store import UserVectorStore
+from .ollama_integration import get_ollama_manager, OllamaChatEngine
+from ..utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class ChatMessage:
+    """Chat message with metadata"""
+    role: str  # user, assistant, system
+    content: str
+    timestamp: datetime
+    user_id: Optional[str] = None
+    sources: Optional[List[Dict[str, Any]]] = None
+
+
+class ChatProvider:
+    """Abstract base for chat providers"""
+    
+    def chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None) -> str:
+        """Generate chat response"""
+        raise NotImplementedError
+    
+    def health_check(self) -> bool:
+        """Check if provider is healthy"""
+        raise NotImplementedError
+
+
+class OpenAIChatProvider(ChatProvider):
+    """OpenAI chat provider"""
+    
+    def __init__(self, model_name: Optional[str] = None, api_key: Optional[str] = None):
+        self.model_name = model_name or config.openai_model
+        self.api_key = api_key or config.openai_api_key
+        
+        if not self.api_key:
+            raise ValueError("OpenAI API key is required")
+        
+        self.llm = ChatOpenAI(
+            openai_api_key=self.api_key,
+            model=self.model_name,
+            temperature=0.3
+        )
+    
+    def chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None) -> str:
+        """Generate chat response using OpenAI"""
+        try:
+            # Convert to LangChain messages
+            langchain_messages = []
+            
+            # Add system message if provided
+            if system_prompt:
+                langchain_messages.append(SystemMessage(content=system_prompt))
+            
+            # Add conversation messages
+            for msg in messages:
+                if msg.role == "user":
+                    langchain_messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    langchain_messages.append(AIMessage(content=msg.content))
+                elif msg.role == "system":
+                    langchain_messages.append(SystemMessage(content=msg.content))
+            
+            # Generate response
+            response = self.llm.invoke(langchain_messages)
+            return response.content
+            
+        except Exception as e:
+            logger.error(f"OpenAI chat generation failed: {e}")
+            raise RuntimeError(f"Chat generation failed: {e}")
+    
+    def health_check(self) -> bool:
+        """Check if OpenAI is accessible"""
+        try:
+            # Simple test with minimal message
+            test_message = [ChatMessage(
+                role="user",
+                content="Hello",
+                timestamp=datetime.now()
+            )]
+            response = self.chat(test_message)
+            return bool(response)
+        except Exception as e:
+            logger.error(f"OpenAI health check failed: {e}")
+            return False
+
+
+class OllamaChatProvider(ChatProvider):
+    """Ollama chat provider"""
+    
+    def __init__(self, model_name: Optional[str] = None):
+        self.model_name = model_name or config.ollama_chat_model
+        
+        # Check if Ollama is available
+        ollama_manager = get_ollama_manager()
+        if not ollama_manager.is_available():
+            raise ValueError("Ollama is not available")
+        
+        self.chat_engine = OllamaChatEngine(self.model_name)
+    
+    def chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None) -> str:
+        """Generate chat response using Ollama"""
+        try:
+            # Clear previous conversation for fresh context
+            self.chat_engine.clear_history()
+            
+            # Add non-user/assistant messages to history
+            for msg in messages[:-1]:  # All except the last message
+                if msg.role in ["user", "assistant"]:
+                    self.chat_engine.conversation_history.append({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
+            
+            # Get the last user message
+            last_message = messages[-1]
+            if last_message.role != "user":
+                raise ValueError("Last message must be from user")
+            
+            # Generate response
+            response = self.chat_engine.chat(last_message.content, system_prompt)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Ollama chat generation failed: {e}")
+            raise RuntimeError(f"Chat generation failed: {e}")
+    
+    def health_check(self) -> bool:
+        """Check if Ollama is accessible"""
+        return self.chat_engine.health_check()
+
+
+def get_chat_provider(provider: Optional[str] = None) -> ChatProvider:
+    """Get chat provider based on configuration"""
+    provider = provider or config.chat_provider
+    
+    if provider == "openai":
+        return OpenAIChatProvider()
+    elif provider == "ollama":
+        return OllamaChatProvider()
+    else:
+        raise ValueError(f"Unknown chat provider: {provider}")
+
+
+class EnhancedChatEngine:
+    """
+    Enhanced chat engine with user context, multiple providers, and RAG capabilities
+    """
+    
+    def __init__(self, 
+                 user_id: Optional[str] = None,
+                 vector_store: Optional[UserVectorStore] = None,
+                 chat_provider: Optional[str] = None):
+        """
+        Initialize enhanced chat engine
+        
+        Args:
+            user_id: User ID for conversation isolation
+            vector_store: Vector store for RAG
+            chat_provider: Chat provider to use
+        """
+        self.user_id = user_id
+        self.vector_store = vector_store
+        self.chat_provider = get_chat_provider(chat_provider)
+        
+        # Conversation history
+        self.conversation_history: List[ChatMessage] = []
+        
+        # System prompt
+        self.system_prompt = self._get_default_system_prompt()
+        
+        logger.info(f"Enhanced chat engine initialized for user: {user_id}")
+    
+    def _get_default_system_prompt(self) -> str:
+        """Get default system prompt"""
+        return """You are Zenith, an AI assistant specialized in analyzing and discussing PDF documents. 
+
+Your capabilities:
+- Answer questions based on uploaded document content
+- Provide detailed explanations and summaries
+- Help users understand complex information
+- Cite sources when possible
+
+Guidelines:
+- Be accurate and helpful
+- If information isn't in the documents, say so clearly
+- Provide specific references when quoting from documents
+- Be concise but thorough in your responses
+- Always be respectful and professional
+
+When no documents are available, you can still assist with general questions using your knowledge."""
+    
+    def set_system_prompt(self, prompt: str):
+        """Set custom system prompt"""
+        self.system_prompt = prompt
+    
+    def chat(self, 
+             message: str, 
+             use_rag: bool = True,
+             max_context_messages: int = 10) -> Dict[str, Any]:
+        """
+        Generate chat response with optional RAG
+        
+        Args:
+            message: User message
+            use_rag: Whether to use RAG for context
+            max_context_messages: Maximum context messages to include
+            
+        Returns:
+            Dict with answer and source documents
+        """
+        try:
+            # Create user message
+            user_message = ChatMessage(
+                role="user",
+                content=message,
+                timestamp=datetime.now(),
+                user_id=self.user_id
+            )
+            
+            # Get relevant documents if using RAG
+            source_documents = []
+            enhanced_prompt = self.system_prompt
+            
+            if use_rag and self.vector_store:
+                # Search for relevant documents
+                relevant_docs = self.vector_store.similarity_search(
+                    query=message,
+                    k=config.max_chunks_per_query,
+                    user_filter=True  # Filter by user
+                )
+                
+                if relevant_docs:
+                    # Prepare context from documents
+                    context_chunks = []
+                    for doc in relevant_docs:
+                        # Extract metadata for sources
+                        source_info = {
+                            "content": doc.page_content[:200] + "...",
+                            "filename": doc.metadata.get("filename", "Unknown"),
+                            "page": doc.metadata.get("page", "Unknown"),
+                            "document_id": doc.metadata.get("document_id"),
+                            "chunk_index": doc.metadata.get("chunk_index", 0)
+                        }
+                        source_documents.append(source_info)
+                        context_chunks.append(doc.page_content)
+                    
+                    # Enhance system prompt with context
+                    context_text = "\n\n".join(context_chunks)
+                    enhanced_prompt = f"""{self.system_prompt}
+
+CONTEXT FROM USER'S DOCUMENTS:
+{context_text}
+
+Please answer the user's question based on the provided context. If the context doesn't contain relevant information, mention that and provide what help you can with your general knowledge."""
+            
+            # Prepare conversation context
+            context_messages = self.conversation_history[-max_context_messages:] if self.conversation_history else []
+            context_messages.append(user_message)
+            
+            # Generate response
+            response_content = self.chat_provider.chat(context_messages, enhanced_prompt)
+            
+            # Create assistant message
+            assistant_message = ChatMessage(
+                role="assistant",
+                content=response_content,
+                timestamp=datetime.now(),
+                user_id=self.user_id,
+                sources=source_documents
+            )
+            
+            # Update conversation history
+            self.conversation_history.append(user_message)
+            self.conversation_history.append(assistant_message)
+            
+            # Keep conversation history manageable
+            if len(self.conversation_history) > 50:
+                self.conversation_history = self.conversation_history[-40:]
+            
+            return {
+                "answer": response_content,
+                "source_documents": source_documents,
+                "timestamp": assistant_message.timestamp.isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Chat generation error: {e}")
+            return {
+                "answer": "I apologize, but I encountered an error while processing your request. Please try again.",
+                "source_documents": [],
+                "error": str(e)
+            }
+    
+    def chat_without_documents(self, message: str) -> Dict[str, Any]:
+        """
+        Chat without using documents (fallback mode)
+        
+        Args:
+            message: User message
+            
+        Returns:
+            Dict with answer
+        """
+        return self.chat(message, use_rag=False)
+    
+    def get_conversation_history(self) -> List[Dict[str, Any]]:
+        """Get conversation history in JSON format"""
+        history = []
+        for msg in self.conversation_history:
+            history.append({
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat(),
+                "sources": msg.sources or []
+            })
+        return history
+    
+    def clear_conversation_history(self):
+        """Clear conversation history"""
+        self.conversation_history = []
+        logger.info(f"Cleared conversation history for user: {self.user_id}")
+    
+    def get_user_document_stats(self) -> Dict[str, Any]:
+        """Get user's document statistics"""
+        if not self.vector_store:
+            return {"error": "No vector store available"}
+        
+        return self.vector_store.get_user_stats()
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Comprehensive health check"""
+        status = {
+            "chat_provider": {
+                "type": config.chat_provider,
+                "healthy": False
+            },
+            "vector_store": {
+                "available": self.vector_store is not None,
+                "healthy": False
+            },
+            "user_documents": 0
+        }
+        
+        # Check chat provider
+        try:
+            status["chat_provider"]["healthy"] = self.chat_provider.health_check()
+        except Exception as e:
+            logger.error(f"Chat provider health check failed: {e}")
+        
+        # Check vector store
+        if self.vector_store:
+            try:
+                status["vector_store"]["healthy"] = self.vector_store.health_check()
+                user_stats = self.vector_store.get_user_stats()
+                status["user_documents"] = user_stats.get("total_documents", 0)
+            except Exception as e:
+                logger.error(f"Vector store health check failed: {e}")
+        
+        return status
+    
+    def setup_conversation_chain(self):
+        """Setup conversation chain (legacy compatibility)"""
+        # This method exists for backward compatibility
+        # The new system doesn't require explicit setup
+        logger.info("Conversation chain setup completed (legacy compatibility)")
+
+
+# Legacy ChatEngine class for backward compatibility
+class ChatEngine(EnhancedChatEngine):
+    """
+    Legacy ChatEngine class for backward compatibility
+    """
+    
+    def __init__(self, 
+                 vector_store,
+                 model_name: Optional[str] = None,
+                 **kwargs):
+        """
+        Initialize legacy chat engine
+        
+        Args:
+            vector_store: Vector store instance
+            model_name: Model name (mapped to provider)
+        """
+        # Determine provider based on model name
+        chat_provider = config.chat_provider
+        if model_name:
+            if "gpt" in model_name.lower():
+                chat_provider = "openai"
+            elif any(ollama_model in model_name.lower() for ollama_model in ["llama", "mistral", "codellama"]):
+                chat_provider = "ollama"
+        
+        super().__init__(
+            user_id=None,  # No user isolation for legacy usage
+            vector_store=vector_store,
+            chat_provider=chat_provider
+        )
+    
+    def chat(self, message: str) -> Dict[str, Any]:
+        """Legacy chat method"""
+        result = super().chat(message, use_rag=True)
+        
+        # Convert to legacy format
+        return {
+            "answer": result["answer"],
+            "source_documents": [
+                {
+                    "page_content": source["content"],
+                    "metadata": {
+                        "filename": source["filename"],
+                        "page": source["page"]
+                    }
+                }
+                for source in result["source_documents"]
+            ]
+        }

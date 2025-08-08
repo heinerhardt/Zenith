@@ -30,7 +30,7 @@ def run_streamlit():
         import subprocess
         cmd = [
             sys.executable, "-m", "streamlit", "run",
-            "src/ui/streamlit_app.py",
+            "src/ui/enhanced_streamlit_app.py",  # Use the new enhanced app
             "--server.port", str(config.app_port),
             "--server.address", "127.0.0.1",
             "--server.headless", "true" if not config.debug_mode else "false"

@@ -14,16 +14,33 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Application configuration settings"""
     
+    # Authentication Configuration
+    enable_auth: bool = Field(default=True, env="ENABLE_AUTH")
+    jwt_secret_key: str = Field(default="zenith-jwt-secret-key", env="JWT_SECRET_KEY")
+    session_duration_hours: int = Field(default=24, env="SESSION_DURATION_HOURS")
+    
     # OpenAI Configuration
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-3.5-turbo", env="OPENAI_MODEL")
     openai_embedding_model: str = Field(default="text-embedding-ada-002", env="OPENAI_EMBEDDING_MODEL")
     
+    # Ollama Configuration
+    ollama_enabled: bool = Field(default=False, env="OLLAMA_ENABLED")
+    ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
+    ollama_chat_model: str = Field(default="llama2", env="OLLAMA_CHAT_MODEL")
+    ollama_embedding_model: str = Field(default="nomic-embed-text", env="OLLAMA_EMBEDDING_MODEL")
+    
+    # Model Provider Selection
+    chat_provider: str = Field(default="openai", env="CHAT_PROVIDER")  # openai or ollama
+    embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")  # openai or ollama
+    
     # Qdrant Configuration
+    qdrant_mode: str = Field(default="local", env="QDRANT_MODE")  # local or cloud
     qdrant_url: str = Field(default="localhost", env="QDRANT_URL")
     qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
     qdrant_api_key: Optional[str] = Field(default=None, env="QDRANT_API_KEY")
     qdrant_collection_name: str = Field(default="zenith_documents", env="QDRANT_COLLECTION_NAME")
+    qdrant_users_collection: str = Field(default="zenith_users", env="QDRANT_USERS_COLLECTION")
     
     # Text Processing Configuration
     chunk_size: int = Field(default=1000, env="CHUNK_SIZE")
