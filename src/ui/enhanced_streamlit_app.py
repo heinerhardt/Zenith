@@ -7,7 +7,7 @@ import os
 import sys
 import streamlit as st
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import time
 import traceback
 import uuid
@@ -811,10 +811,35 @@ class ZenithAuthenticatedApp:
         """Render the chat tab"""
         st.markdown("### 💬 Chat with Your Documents")
         
+        # Ensure components are initialized
+        user_id = st.session_state.user_info.get('id')
+        
+        # Initialize vector store if needed
+        if not st.session_state.vector_store:
+            try:
+                st.session_state.vector_store = UserVectorStore(user_id=user_id)
+            except Exception as e:
+                st.error(f"❌ Failed to initialize vector store: {str(e)}")
+                return
+        
+        # Initialize chat engine if needed
+        if not st.session_state.chat_engine:
+            try:
+                st.session_state.chat_engine = EnhancedChatEngine(
+                    user_id=user_id,
+                    vector_store=st.session_state.vector_store
+                )
+            except Exception as e:
+                st.error(f"❌ Failed to initialize chat engine: {str(e)}")
+                return
+        
         # Check if user has documents or allow general chat
         user_stats = {}
         if st.session_state.vector_store:
-            user_stats = st.session_state.vector_store.get_user_stats()
+            try:
+                user_stats = st.session_state.vector_store.get_user_stats()
+            except Exception as e:
+                user_stats = {'total_documents': 0}
         
         has_documents = user_stats.get('total_documents', 0) > 0
         
@@ -871,19 +896,21 @@ class ZenithAuthenticatedApp:
         
         try:
             with st.spinner("Thinking..."):
-                # Get response from chat engine
-                if st.session_state.chat_engine:
-                    # Use RAG if user has documents, otherwise general chat
-                    response = st.session_state.chat_engine.chat(
-                        user_input, 
-                        use_rag=has_documents
+                # Initialize chat engine if not available
+                if not st.session_state.chat_engine:
+                    user_id = st.session_state.user_info.get('id')
+                    if not st.session_state.vector_store:
+                        st.session_state.vector_store = UserVectorStore(user_id=user_id)
+                    st.session_state.chat_engine = EnhancedChatEngine(
+                        user_id=user_id,
+                        vector_store=st.session_state.vector_store
                     )
-                else:
-                    # Fallback to basic response
-                    response = {
-                        "answer": "I'm sorry, but the chat system is not properly initialized. Please try refreshing the page.",
-                        "source_documents": []
-                    }
+                
+                # Get response from chat engine
+                response = st.session_state.chat_engine.chat(
+                    user_input, 
+                    use_rag=has_documents
+                )
                 
                 # Add assistant response to chat history and session
                 assistant_message = {
@@ -909,6 +936,11 @@ class ZenithAuthenticatedApp:
             error_message = f"Sorry, I encountered an error: {str(e)}"
             self.add_message_to_current_session("assistant", error_message)
             logger.error(f"Error in chat: {e}")
+            
+            # Show error for debugging if needed
+            with st.expander("🔍 Error Details", expanded=False):
+                import traceback
+                st.code(traceback.format_exc())
         
         # Force refresh to show new messages
         st.rerun()
@@ -1404,24 +1436,38 @@ class ZenithAuthenticatedApp:
                 )
             
             if st.button("Test MinIO Connection"):
-                try:
-                    client = MinIOClient(
-                        endpoint=minio_endpoint,
-                        access_key=minio_access_key,
-                        secret_key=minio_secret_key,
-                        secure=minio_secure
-                    )
+                with st.spinner("Testing MinIO connection..."):
+                    try:
+                        client = MinIOClient(
+                            endpoint=minio_endpoint,
+                            access_key=minio_access_key,
+                            secret_key=minio_secret_key,
+                            secure=minio_secure
+                        )
+                        
+                        # Test connection and get buckets
+                        buckets = client.list_buckets()
+                        st.success(f"✅ Connected successfully! Found {len(buckets)} buckets")
+                        
+                        # Store connection info in session state for reuse
+                        st.session_state.minio_config = {
+                            'endpoint': minio_endpoint,
+                            'access_key': minio_access_key,
+                            'secret_key': minio_secret_key,
+                            'secure': minio_secure,
+                            'connected': True
+                        }
+                        
+                        if buckets:
+                            st.markdown("**Available Buckets:**")
+                            for bucket in buckets:
+                                st.markdown(f"- 🪣 {bucket}")
+                        else:
+                            st.warning("No buckets found in MinIO instance")
                     
-                    buckets = client.list_buckets()
-                    st.success(f"✅ Connected successfully! Found {len(buckets)} buckets")
-                    
-                    if buckets:
-                        st.markdown("**Available Buckets:**")
-                        for bucket in buckets:
-                            st.markdown(f"- {bucket}")
-                
-                except Exception as e:
-                    st.error(f"❌ Connection failed: {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Connection failed: {str(e)}")
+                        st.session_state.minio_config = {'connected': False}
         
         # PDF Processing from MinIO
         st.markdown("### 📄 Process PDFs from MinIO")
@@ -1442,50 +1488,338 @@ class ZenithAuthenticatedApp:
                 help="Optional prefix to filter PDFs (e.g., 'pdfs/' or 'documents/2024/')"
             )
         
-        if st.button("🔍 List PDFs from MinIO"):
-            if bucket_name:
+        # Initialize session state for PDF files
+        if 'minio_pdf_files' not in st.session_state:
+            st.session_state.minio_pdf_files = []
+        if 'minio_bucket_name' not in st.session_state:
+            st.session_state.minio_bucket_name = ""
+        
+        # List PDFs button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("🔍 List PDFs from MinIO", type="secondary"):
+                if bucket_name:
+                    try:
+                        # Store current bucket name
+                        st.session_state.minio_bucket_name = bucket_name
+                        
+                        # Create MinIO client
+                        client = MinIOClient(
+                            endpoint=minio_endpoint,
+                            access_key=minio_access_key,
+                            secret_key=minio_secret_key,
+                            secure=minio_secure
+                        )
+                        
+                        with st.spinner("🔍 Connecting to MinIO and listing PDFs..."):
+                            pdf_files = client.list_pdf_files(bucket_name, pdf_prefix)
+                        
+                        # Store PDF files in session state
+                        st.session_state.minio_pdf_files = pdf_files
+                        
+                        if pdf_files:
+                            st.success(f"✅ Found {len(pdf_files)} PDF files in bucket '{bucket_name}'")
+                        else:
+                            st.warning(f"⚠️ No PDF files found in bucket '{bucket_name}' with prefix '{pdf_prefix}'")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error listing PDFs: {str(e)}")
+                        st.session_state.minio_pdf_files = []
+                else:
+                    st.error("⚠️ Please enter a bucket name")
+        
+        with col2:
+            if st.button("🔄 Refresh List", help="Refresh the PDF file list"):
+                if bucket_name and st.session_state.minio_pdf_files:
+                    # Re-trigger the listing with current settings
+                    st.rerun()
+        
+        with col3:
+            if st.button("🗑️ Clear List", help="Clear the PDF file list"):
+                st.session_state.minio_pdf_files = []
+                st.session_state.minio_bucket_name = ""
+                st.success("✅ PDF list cleared")
+        
+        # Show PDF file selection if files are available
+        if st.session_state.minio_pdf_files:
+            st.markdown("---")
+            st.markdown(f"### 📋 Available PDFs in '{st.session_state.minio_bucket_name}' ({len(st.session_state.minio_pdf_files)} files)")
+            
+            # File selection options
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Initialize default selection if not set
+                if 'minio_selected_files' not in st.session_state:
+                    st.session_state.minio_selected_files = []
+                
+                # Multi-select for individual files
+                selected_files = st.multiselect(
+                    "Select specific PDFs to process:",
+                    options=st.session_state.minio_pdf_files,
+                    default=st.session_state.minio_selected_files,
+                    help="Choose specific PDF files to download and process",
+                    key="pdf_multiselect"
+                )
+                
+                # Update session state with current selection
+                st.session_state.minio_selected_files = selected_files
+            
+            with col2:
+                st.markdown("**Quick Select:**")
+                if st.button("📋 Select All", help="Select all PDF files"):
+                    st.session_state.minio_selected_files = st.session_state.minio_pdf_files.copy()
+                    st.rerun()
+                
+                if st.button("🔝 Select First 5", help="Select first 5 PDF files"):
+                    st.session_state.minio_selected_files = st.session_state.minio_pdf_files[:5]
+                    st.rerun()
+                
+                if st.button("🚫 Select None", help="Clear selection"):
+                    st.session_state.minio_selected_files = []
+                    st.rerun()
+            
+            # Show selected files info
+            current_selection = st.session_state.minio_selected_files
+            
+            if current_selection:
+                st.success(f"📁 **{len(current_selection)} files selected for processing:**")
+                
+                # Smart display: show files if ≤10, otherwise show summary
+                if len(current_selection) <= 10:
+                    # Display selected files in columns for small selections
+                    cols = st.columns(3)
+                    for i, filename in enumerate(current_selection):
+                        with cols[i % 3]:
+                            st.markdown(f"✅ {filename}")
+                else:
+                    # Show summary for large selections
+                    st.info(f"📊 **Large selection:** {len(current_selection)} files selected")
+                    
+                    # Show first few and last few files
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**First 3 files:**")
+                        for filename in current_selection[:3]:
+                            st.markdown(f"✅ {filename}")
+                    
+                    with col2:
+                        st.markdown("**Last 3 files:**")
+                        for filename in current_selection[-3:]:
+                            st.markdown(f"✅ {filename}")
+                    
+                    # Expandable list for full view
+                    with st.expander(f"📋 View all {len(current_selection)} selected files", expanded=False):
+                        cols = st.columns(3)
+                        for i, filename in enumerate(current_selection):
+                            with cols[i % 3]:
+                                st.markdown(f"✅ {filename}")
+                
+                with col1:
+                    # Add smart processing options
+                    processing_mode = st.radio(
+                        "Processing Mode:",
+                        options=["🔄 Smart Processing (Skip Processed)", "🔁 Force Reprocess All"],
+                        help="Smart processing skips files that were already processed successfully"
+                    )
+                    
+                    # Show processing analysis
+                    if processing_mode.startswith("🔄"):
+                        # Check which files need processing
+                        files_to_process, already_processed = self.analyze_files_for_processing(
+                            current_selection, 
+                            st.session_state.minio_bucket_name
+                        )
+                        
+                        if already_processed:
+                            st.info(f"📊 **Processing Analysis:**")
+                            st.markdown(f"- ✅ {len(already_processed)} files already processed (will skip)")
+                            st.markdown(f"- 🔄 {len(files_to_process)} files need processing")
+                            
+                            if files_to_process:
+                                with st.expander("📋 Files to Process", expanded=False):
+                                    for filename in files_to_process:
+                                        st.markdown(f"🔄 {filename}")
+                                        
+                                with st.expander("✅ Files Already Processed", expanded=False):
+                                    for filename in already_processed:
+                                        st.markdown(f"✅ {filename}")
+                            else:
+                                st.success("🎉 All selected files are already processed!")
+                        else:
+                            st.info(f"🔄 All {len(files_to_process)} files need processing")
+                    else:
+                        files_to_process = current_selection
+                        st.info(f"🔁 Will reprocess all {len(files_to_process)} files")
+                
+                # Process selected files button
+                st.markdown("---")
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    button_text = "🚀 Process Selected PDFs"
+                    if processing_mode.startswith("🔄"):
+                        files_to_process, _ = self.analyze_files_for_processing(
+                            current_selection, 
+                            st.session_state.minio_bucket_name
+                        )
+                        if len(files_to_process) == 0:
+                            button_text = "✅ All Files Processed"
+                            st.button(button_text, disabled=True, use_container_width=True)
+                        else:
+                            button_text = f"🚀 Process {len(files_to_process)} New/Changed Files"
+                    
+                    if button_text.startswith("🚀") and st.button(button_text, type="primary", use_container_width=True):
+                        # Determine which files to actually process
+                        if processing_mode.startswith("🔄"):
+                            files_to_process, _ = self.analyze_files_for_processing(
+                                current_selection, 
+                                st.session_state.minio_bucket_name
+                            )
+                        else:
+                            files_to_process = current_selection
+                        
+                        # Store files for processing
+                        st.session_state.processing_files = files_to_process
+                        st.session_state.processing_bucket = st.session_state.minio_bucket_name
+                        st.session_state.processing_mode = processing_mode
+                        st.session_state.start_processing = True
+                        st.rerun()
+            else:
+                st.warning("⚠️ **No files selected.** Please select PDFs to process using the multiselect above or quick select buttons.")
+                
+                # Show available files as reference
+                with st.expander("📄 Available Files", expanded=False):
+                    for i, filename in enumerate(st.session_state.minio_pdf_files, 1):
+                        st.markdown(f"{i}. {filename}")
+        
+        # Show file list preview
+        elif bucket_name:
+            st.info("💡 Click '🔍 List PDFs from MinIO' to discover PDF files in the bucket")
+        
+        # Handle processing if triggered
+        if st.session_state.get('start_processing', False):
+            st.session_state.start_processing = False  # Reset flag
+            
+            # Validate we have everything needed for processing
+            processing_files = st.session_state.get('processing_files', [])
+            processing_bucket = st.session_state.get('processing_bucket', '')
+            
+            if processing_files and processing_bucket:
+                st.markdown("---")
+                st.info(f"🚀 **Starting processing of {len(processing_files)} files from bucket '{processing_bucket}'**")
+                
+                # Create MinIO client for processing
                 try:
-                    client = MinIOClient(
+                    processing_client = MinIOClient(
                         endpoint=minio_endpoint,
                         access_key=minio_access_key,
                         secret_key=minio_secret_key,
                         secure=minio_secure
                     )
                     
-                    with st.spinner("Connecting to MinIO and listing PDFs..."):
-                        pdf_files = client.list_pdf_files(bucket_name, pdf_prefix)
+                    # Start processing with enhanced tracking
+                    self.process_minio_pdfs(
+                        processing_client,
+                        processing_bucket,
+                        processing_files
+                    )
                     
-                    if pdf_files:
-                        st.success(f"Found {len(pdf_files)} PDF files")
-                        
-                        # Show file list
-                        selected_files = st.multiselect(
-                            "Select PDFs to process:",
-                            options=pdf_files,
-                            default=pdf_files[:5] if len(pdf_files) <= 5 else pdf_files[:3],
-                            help="Select which PDF files to download and process"
-                        )
-                        
-                        if selected_files and st.button("🚀 Process Selected PDFs", type="primary"):
-                            self.process_minio_pdfs(client, bucket_name, selected_files)
-                    else:
-                        st.warning("No PDF files found in the specified bucket/path")
-                
                 except Exception as e:
-                    st.error(f"Error listing PDFs: {str(e)}")
+                    st.error(f"❌ Failed to create MinIO client for processing: {str(e)}")
+                    st.error("Please check your MinIO configuration and try again.")
             else:
-                st.error("Please enter a bucket name")
+                st.error("❌ Processing failed: No files or bucket specified")
+                st.error("Please select files and try again.")
     
-    def process_minio_pdfs(self, minio_client, bucket_name: str, pdf_files: List[str]):
-        """Process PDFs from MinIO"""
+    def analyze_files_for_processing(self, selected_files: List[str], bucket_name: str) -> Tuple[List[str], List[str]]:
+        """
+        Analyze which files need processing vs which are already processed
+        Returns: (files_to_process, already_processed_files)
+        """
+        files_to_process = []
+        already_processed = []
+        
         try:
+            # Get current user's processed files from session state or vector store
+            user_id = st.session_state.user_info.get('id')
+            processed_files_info = st.session_state.get('processed_files_history', {})
+            
+            # Initialize vector store if needed to check existing documents
+            if not st.session_state.vector_store:
+                st.session_state.vector_store = UserVectorStore(user_id=user_id)
+            
+            for filename in selected_files:
+                # Create a unique identifier for this file from this bucket
+                file_key = f"{bucket_name}/{filename}"
+                
+                # Check if file was already processed
+                if file_key in processed_files_info:
+                    # File was processed before - check if it might have changed
+                    # For now, we'll assume if it's in the history, it's processed
+                    # In a more advanced version, we could check file modification dates
+                    already_processed.append(filename)
+                else:
+                    # File not processed yet
+                    files_to_process.append(filename)
+            
+            return files_to_process, already_processed
+            
+        except Exception as e:
+            # If analysis fails, process all files to be safe
+            logger.error(f"Error analyzing files for processing: {str(e)}")
+            return selected_files, []
+    
+    def update_processed_files_history(self, bucket_name: str, processed_files: List[str]):
+        """Update the history of processed files"""
+        try:
+            if 'processed_files_history' not in st.session_state:
+                st.session_state.processed_files_history = {}
+            
+            import time
+            current_time = time.time()
+            
+            for filename in processed_files:
+                file_key = f"{bucket_name}/{filename}"
+                st.session_state.processed_files_history[file_key] = {
+                    'processed_at': current_time,
+                    'bucket': bucket_name,
+                    'filename': filename,
+                    'user_id': st.session_state.user_info.get('id')
+                }
+            
+            logger.info(f"Updated processed files history: {len(processed_files)} files from bucket {bucket_name}")
+            
+        except Exception as e:
+            logger.error(f"Error updating processed files history: {str(e)}")
+
+    def process_minio_pdfs(self, minio_client, bucket_name: str, pdf_files: List[str]):
+        """Process PDFs from MinIO with detailed progress tracking"""
+        # Immediate status update
+        st.markdown("### 🚀 MinIO Processing Started")
+        st.info(f"Starting to process {len(pdf_files)} files...")
+        
+        try:
+            # Debug information
+            st.markdown("#### 🔍 Debug Information")
+            st.write(f"**Bucket:** {bucket_name}")
+            st.write(f"**Files to process:** {pdf_files}")
+            st.write(f"**MinIO client:** {type(minio_client)}")
+            
+            # Test basic MinIO connection first
+            st.info("Testing MinIO connection...")
+            buckets = minio_client.list_buckets()
+            st.success(f"✅ MinIO connection working - found {len(buckets)} buckets")
+            
             # Initialize processing components
+            st.info("Initializing processing components...")
             if not st.session_state.pdf_processor:
                 st.session_state.pdf_processor = PDFProcessor()
+                st.success("✅ PDF processor initialized")
             
             if not st.session_state.vector_store:
                 user_id = st.session_state.user_info.get('id')
                 st.session_state.vector_store = UserVectorStore(user_id=user_id)
+                st.success("✅ Vector store initialized")
             
             if not st.session_state.chat_engine:
                 user_id = st.session_state.user_info.get('id')
@@ -1493,42 +1827,133 @@ class ZenithAuthenticatedApp:
                     user_id=user_id,
                     vector_store=st.session_state.vector_store
                 )
+                st.success("✅ Chat engine initialized")
             
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            # Progress tracking components
+            st.markdown("### 📊 Processing Progress")
             
+            # Main progress bar
+            main_progress = st.progress(0)
+            status_container = st.container()
+            
+            # Create expandable log area
+            with st.expander("📋 Detailed Processing Log", expanded=True):
+                log_container = st.empty()
+                log_text = ""
+            
+            # Statistics container
+            stats_container = st.container()
+            
+            # Processing variables
+            total_files = len(pdf_files)
             documents = []
             processed_files = []
+            failed_files = []
+            processing_stats = {
+                'total_files': total_files,
+                'processed_files': 0,
+                'failed_files': 0,
+                'total_pages': 0,
+                'total_chunks': 0,
+                'start_time': time.time()
+            }
+            
+            def update_log(message: str, level: str = "info"):
+                nonlocal log_text
+                timestamp = time.strftime("%H:%M:%S")
+                if level == "error":
+                    log_text += f"🔴 [{timestamp}] {message}\n"
+                elif level == "success":
+                    log_text += f"✅ [{timestamp}] {message}\n"
+                elif level == "warning":
+                    log_text += f"⚠️ [{timestamp}] {message}\n"
+                else:
+                    log_text += f"ℹ️ [{timestamp}] {message}\n"
+                log_container.text(log_text)
+            
+            def update_stats():
+                with stats_container:
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Files Processed", f"{processing_stats['processed_files']}/{processing_stats['total_files']}")
+                    with col2:
+                        st.metric("Pages Found", processing_stats['total_pages'])
+                    with col3:
+                        st.metric("Text Chunks", processing_stats['total_chunks'])
+                    with col4:
+                        elapsed = time.time() - processing_stats['start_time']
+                        st.metric("Elapsed Time", f"{elapsed:.1f}s")
+            
+            # Start processing
+            update_log(f"🚀 Starting MinIO PDF processing for {total_files} files from bucket '{bucket_name}'")
+            update_log(f"📁 Files to process: {', '.join(pdf_files)}")
             
             for i, pdf_file in enumerate(pdf_files):
-                status_text.text(f"Processing {pdf_file}...")
-                progress_bar.progress((i + 1) / len(pdf_files))
+                current_progress = i / total_files
+                main_progress.progress(current_progress)
+                
+                with status_container:
+                    st.markdown(f"**Current File:** `{pdf_file}` ({i+1}/{total_files})")
+                
+                update_log(f"📥 Downloading: {pdf_file}")
                 
                 try:
-                    # Download and process PDF from MinIO
+                    # Download file from MinIO
                     temp_path = minio_client.download_file(bucket_name, pdf_file)
+                    file_size = temp_path.stat().st_size
+                    update_log(f"✅ Downloaded: {pdf_file} ({format_file_size(file_size)})")
                     
                     # Process the downloaded PDF
-                    pdf_docs = st.session_state.pdf_processor.load_pdfs_from_directory(
-                        str(temp_path.parent)
+                    update_log(f"🔄 Processing PDF: {pdf_file}")
+                    pdf_docs = st.session_state.pdf_processor.load_pdf(
+                        str(temp_path)
                     )
                     
                     if pdf_docs:
+                        page_count = len(pdf_docs)
                         documents.extend(pdf_docs)
                         processed_files.append(pdf_file)
+                        processing_stats['processed_files'] += 1
+                        processing_stats['total_pages'] += page_count
+                        
+                        update_log(f"✅ Processed: {pdf_file} ({page_count} pages)", "success")
+                    else:
+                        failed_files.append(pdf_file)
+                        processing_stats['failed_files'] += 1
+                        update_log(f"❌ Failed to extract content from: {pdf_file}", "error")
                     
                     # Clean up temp file
                     if temp_path.exists():
                         temp_path.unlink()
+                        update_log(f"🗑️ Cleaned up temporary file for: {pdf_file}")
                 
                 except Exception as e:
-                    st.error(f"Error processing {pdf_file}: {str(e)}")
-            
-            if documents:
-                status_text.text("Creating text chunks...")
-                chunks = st.session_state.pdf_processor.split_documents(documents)
+                    failed_files.append(pdf_file)
+                    processing_stats['failed_files'] += 1
+                    error_msg = f"Error processing {pdf_file}: {str(e)}"
+                    update_log(error_msg, "error")
+                    logger.error(error_msg)
                 
-                status_text.text("Storing in vector database...")
+                # Update statistics
+                update_stats()
+            
+            # Text chunking phase
+            if documents:
+                main_progress.progress(0.8)
+                with status_container:
+                    st.markdown("**Phase:** Creating text chunks...")
+                
+                update_log(f"🔄 Creating text chunks from {len(documents)} pages...")
+                chunks = st.session_state.pdf_processor.split_documents(documents)
+                processing_stats['total_chunks'] = len(chunks)
+                update_log(f"✅ Created {len(chunks)} text chunks", "success")
+                
+                # Vector storage phase
+                main_progress.progress(0.9)
+                with status_container:
+                    st.markdown("**Phase:** Storing in vector database...")
+                
+                update_log("💾 Storing documents in vector database...")
                 document_id = str(uuid.uuid4())
                 success = st.session_state.vector_store.add_documents(chunks, document_id)
                 
@@ -1540,26 +1965,68 @@ class ZenithAuthenticatedApp:
                         'total_documents': len(documents),
                         'total_chunks': len(chunks),
                         'processed_files': processed_files,
-                        'source': 'MinIO'
+                        'source': 'MinIO',
+                        'bucket': bucket_name
                     }
                     
-                    progress_bar.progress(1.0)
-                    status_text.text("✅ Processing complete!")
+                    # Update processed files history for future incremental processing
+                    self.update_processed_files_history(bucket_name, processed_files)
                     
-                    st.success(f"Successfully processed {len(processed_files)} PDFs from MinIO!")
-                    st.markdown(f"**Processed:** {len(documents)} pages into {len(chunks)} chunks")
+                    main_progress.progress(1.0)
+                    with status_container:
+                        st.markdown("**Status:** ✅ **Complete!**")
                     
-                    # Show processed files
-                    with st.expander("View processed files"):
+                    update_log("💾 Successfully stored all documents in vector database", "success")
+                    update_log(f"🎉 Processing complete! {len(processed_files)} files processed successfully", "success")
+                    update_log(f"📝 Updated processing history for future incremental processing", "success")
+                    
+                    # Final statistics
+                    update_stats()
+                    
+                    # Success summary
+                    st.success(f"🎉 Successfully processed {len(processed_files)} PDFs from MinIO bucket '{bucket_name}'!")
+                    
+                    # Show detailed results
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("#### ✅ Successfully Processed")
                         for filename in processed_files:
-                            st.markdown(f"- {filename}")
+                            st.markdown(f"- ✅ {filename}")
+                    
+                    if failed_files:
+                        with col2:
+                            st.markdown("#### ❌ Failed to Process")
+                            for filename in failed_files:
+                                st.markdown(f"- ❌ {filename}")
+                    
+                    # Processing summary
+                    total_time = time.time() - processing_stats['start_time']
+                    st.info(f"📊 **Summary:** {processing_stats['total_pages']} pages → {processing_stats['total_chunks']} chunks in {total_time:.1f} seconds")
+                    
                 else:
-                    st.error("Failed to store documents in vector database")
+                    update_log("❌ Failed to store documents in vector database", "error")
+                    st.error("❌ Failed to store documents in vector database")
             else:
-                st.warning("No documents were successfully processed")
+                main_progress.progress(1.0)
+                st.markdown("**Status:** ⚠️ **No documents processed**")
+                
+                update_log("⚠️ No documents were successfully processed", "warning")
+                st.warning("⚠️ No documents were successfully processed")
+                
+                if failed_files:
+                    st.markdown("#### ❌ Failed Files")
+                    for filename in failed_files:
+                        st.markdown(f"- {filename}")
         
         except Exception as e:
-            st.error(f"Error during MinIO processing: {str(e)}")
+            error_msg = f"Critical error during MinIO processing: {str(e)}"
+            st.error(f"❌ {error_msg}")
+            logger.error(error_msg)
+            
+            # Show stack trace for debugging
+            import traceback
+            st.error("**Full error details:**")
+            st.code(traceback.format_exc())
             logger.error(f"MinIO processing error: {e}")
     
     def render_system_status(self):
