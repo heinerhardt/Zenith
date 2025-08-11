@@ -55,6 +55,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Explicitly disable multipage navigation
+try:
+    # Clear any existing pages
+    if hasattr(st, '_pages'):
+        st._pages.clear()
+    if hasattr(st, 'session_state') and hasattr(st.session_state, '_pages'):
+        st.session_state._pages.clear()
+    
+    # Disable page discovery
+    import streamlit.runtime.pages_manager
+    if hasattr(streamlit.runtime.pages_manager, '_main_script_path'):
+        # Force single-page mode
+        pass
+except:
+    pass
+
 # Custom CSS
 st.markdown("""
 <style>
@@ -120,6 +136,48 @@ st.markdown("""
     padding: 20px;
     text-align: center;
     background-color: #fafafa;
+}
+
+/* AGGRESSIVELY HIDE ALL UNWANTED NAVIGATION */
+div[data-testid="stSidebar"] > div > div > div > div:first-child {
+    display: none !important;
+}
+
+/* Hide multipage navigation if it appears */
+.css-1kyxreq, .css-12oz5g7, .css-1v3fvcr, .css-1e5imcs {
+    display: none !important;
+}
+
+/* Hide any page navigation elements */
+[data-testid="stSidebarNav"], 
+[data-testid="stSidebarNavItems"],
+.css-1544g2n,
+.css-1d391kg,
+.css-1rs6os,
+.css-17eq0hr,
+.css-pkbazv,
+.css-1emrehy {
+    display: none !important;
+}
+
+/* Force clean sidebar - hide first element */
+section[data-testid="stSidebar"] > div:first-child > div:first-child > div:first-child {
+    display: none !important;
+}
+
+/* Hide any selectbox or navigation in sidebar */
+section[data-testid="stSidebar"] div[data-testid="stSelectbox"] {
+    display: none !important;
+}
+
+/* Hide page selector if it exists */
+div[data-baseweb="select"] {
+    display: none !important;
+}
+
+/* Additional safety - hide any potential page navigation */
+.stSelectbox, .css-1wa3eu0, .css-10trblm {
+    display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -407,17 +465,41 @@ class ZenithAuthenticatedApp:
         # Render sidebar with chat history
         self.render_sidebar_info()
         
-        # Create tabs for file upload and chat
-        tab1, tab2 = st.tabs(["📁 Upload Documents", "💬 Chat"])
+        # Create tabs for chat and file upload (Chat first as default)
+        tab1, tab2 = st.tabs(["💬 Chat", "📁 Upload Documents"])
         
         with tab1:
-            self.render_file_upload_interface()
+            self.render_chat_tab()
         
         with tab2:
-            self.render_chat_tab()
+            self.render_file_upload_interface()
     
     def render_sidebar_info(self):
-        """Render sidebar information"""
+        """Render sidebar information - CLEAN VERSION"""
+        # Force hide any navigation with JavaScript
+        st.markdown("""
+        <script>
+        setTimeout(function() {
+            // Hide any page navigation elements
+            const elements = document.querySelectorAll('[data-testid="stSidebarNav"], [data-testid="stSidebarNavItems"], .css-1544g2n, .stSelectbox');
+            elements.forEach(el => el.style.display = 'none');
+            
+            // Hide first child of sidebar if it contains navigation
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            if (sidebar) {
+                const firstChild = sidebar.querySelector('div > div > div > div:first-child');
+                if (firstChild && (firstChild.innerText.includes('Enhanced') || firstChild.innerText.includes('MinIO'))) {
+                    firstChild.style.display = 'none';
+                }
+            }
+        }, 100);
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Clear any previous sidebar content to prevent unwanted navigation
+        if hasattr(st.session_state, 'page_selector'):
+            del st.session_state.page_selector
+        
         st.sidebar.markdown("### 📚 Zenith PDF Chatbot")
         
         # Chat History Section
