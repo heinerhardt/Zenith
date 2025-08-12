@@ -22,7 +22,7 @@ from src.core.qdrant_manager import get_qdrant_client
 from src.core.enhanced_vector_store import UserVectorStore
 from src.core.enhanced_chat_engine import EnhancedChatEngine
 from src.core.pdf_processor import PDFProcessor
-from src.core.settings_manager import get_settings_manager
+from src.core.enhanced_settings_manager import get_enhanced_settings_manager
 from src.core.chat_history import get_chat_history_manager, ChatSession, ChatMessage
 from src.auth.auth_manager import (
     AuthenticationManager, init_auth_session, get_current_user_from_session,
@@ -352,7 +352,7 @@ class ZenithAuthenticatedApp:
         
         # Check if registration is allowed
         try:
-            settings_manager = get_settings_manager()
+            settings_manager = get_enhanced_settings_manager()
             settings = settings_manager.get_settings()
             
             if not settings.allow_user_registration:
@@ -1030,7 +1030,7 @@ class ZenithAuthenticatedApp:
         """Render system settings configuration"""
         st.markdown("### General System Settings")
         
-        settings_manager = get_settings_manager()
+        settings_manager = get_enhanced_settings_manager()
         current_settings = settings_manager.get_settings()
         
         with st.form("system_settings_form"):
@@ -1111,7 +1111,7 @@ class ZenithAuthenticatedApp:
         """Render AI model configuration"""
         st.markdown("### AI Model Configuration")
         
-        settings_manager = get_settings_manager()
+        settings_manager = get_enhanced_settings_manager()
         current_settings = settings_manager.get_settings()
         
         # Provider selection
@@ -1314,43 +1314,112 @@ class ZenithAuthenticatedApp:
                 except Exception as e:
                     st.error(f"Qdrant test failed: {str(e)}")
         
+        # Provider Status
+        st.markdown("#### Current Provider Status")
+        try:
+            from src.core.provider_manager import get_provider_manager
+            provider_manager = get_provider_manager()
+            status = provider_manager.get_provider_status()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Chat Provider**")
+                current_chat = status['current_providers']['chat']
+                chat_health = status['provider_health']['chat'].get(current_chat, {})
+                health_icon = "✅" if chat_health.get('healthy') else "❌"
+                st.markdown(f"{health_icon} {current_chat.title()}: {chat_health.get('message', 'Unknown')}")
+            
+            with col2:
+                st.markdown("**Embedding Provider**")
+                current_embed = status['current_providers']['embedding']
+                embed_health = status['provider_health']['embedding'].get(current_embed, {})
+                health_icon = "✅" if embed_health.get('healthy') else "❌"
+                st.markdown(f"{health_icon} {current_embed.title()}: {embed_health.get('message', 'Unknown')}")
+            
+        except Exception as e:
+            st.warning(f"Could not get provider status: {e}")
+        
         # Save Settings Button
         st.markdown("---")
-        if st.button("💾 Save AI Model Settings", type="primary"):
-            updates = {
-                "preferred_chat_provider": chat_provider,
-                "preferred_embedding_provider": embedding_provider,
-                "ollama_enabled": ollama_enabled,
-                "ollama_endpoint": ollama_endpoint,
-                "ollama_chat_model": ollama_chat_model,
-                "ollama_embedding_model": ollama_embedding_model,
-                "openai_chat_model": openai_chat_model,
-                "openai_embedding_model": openai_embedding_model,
-                "qdrant_mode": qdrant_mode,
-                "qdrant_collection_name": qdrant_collection
-            }
-            
-            # Add API keys only if they were changed
-            if openai_api_key and openai_api_key != "***":
-                updates["openai_api_key"] = openai_api_key
-            
-            if qdrant_mode == "local":
-                updates.update({
-                    "qdrant_local_host": qdrant_host,
-                    "qdrant_local_port": qdrant_port
-                })
-            else:
-                if qdrant_cloud_url:
-                    updates["qdrant_cloud_url"] = qdrant_cloud_url
-                if qdrant_api_key and qdrant_api_key != "***":
-                    updates["qdrant_cloud_api_key"] = qdrant_api_key
-            
-            success, message = settings_manager.update_settings(updates)
-            if success:
-                st.success(message)
-                st.info("💡 Restart the application for some changes to take effect.")
-            else:
-                st.error(message)
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            if st.button("💾 Save AI Model Settings", type="primary", use_container_width=True):
+                updates = {
+                    "preferred_chat_provider": chat_provider,
+                    "preferred_embedding_provider": embedding_provider,
+                    "ollama_enabled": ollama_enabled,
+                    "ollama_endpoint": ollama_endpoint,
+                    "ollama_chat_model": ollama_chat_model,
+                    "ollama_embedding_model": ollama_embedding_model,
+                    "openai_chat_model": openai_chat_model,
+                    "openai_embedding_model": openai_embedding_model,
+                    "qdrant_mode": qdrant_mode,
+                    "qdrant_collection_name": qdrant_collection
+                }
+                
+                # Add API keys only if they were changed
+                if openai_api_key and openai_api_key != "***":
+                    updates["openai_api_key"] = openai_api_key
+                
+                if qdrant_mode == "local":
+                    updates.update({
+                        "qdrant_local_host": qdrant_host,
+                        "qdrant_local_port": qdrant_port
+                    })
+                else:
+                    if qdrant_cloud_url:
+                        updates["qdrant_cloud_url"] = qdrant_cloud_url
+                    if qdrant_api_key and qdrant_api_key != "***":
+                        updates["qdrant_cloud_api_key"] = qdrant_api_key
+                
+                # Show processing indicator
+                with st.spinner("💾 Saving settings and reinitializing providers..."):
+                    success, message = settings_manager.update_settings(updates)
+                
+                if success:
+                    st.success(f"✅ {message}")
+                    
+                    # Show what changed
+                    current_settings = settings_manager.get_settings()
+                    changes_detected = []
+                    if chat_provider != current_settings.preferred_chat_provider:
+                        changes_detected.append(f"Chat provider → {chat_provider}")
+                    if embedding_provider != current_settings.preferred_embedding_provider:
+                        changes_detected.append(f"Embedding provider → {embedding_provider}")
+                    if ollama_enabled != current_settings.ollama_enabled:
+                        status = "enabled" if ollama_enabled else "disabled"
+                        changes_detected.append(f"Ollama → {status}")
+                    
+                    if changes_detected:
+                        st.info(f"🔄 **Dynamic changes applied:**\n" + "\n- ".join([""] + changes_detected))
+                        st.info("✨ **No restart required!** Changes have been applied immediately.")
+                    else:
+                        st.info("ℹ️ Settings saved successfully. No provider changes detected.")
+                    
+                    # Show updated provider status
+                    time.sleep(1)  # Give providers time to initialize
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+        
+        with col2:
+            if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True):
+                with st.spinner("🔄 Reinitializing all providers..."):
+                    try:
+                        from src.core.provider_manager import get_provider_manager
+                        provider_manager = get_provider_manager()
+                        success, message = settings_manager.force_reinitialize_providers()
+                        
+                        if success:
+                            st.success(f"✅ {message}")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+                    except Exception as e:
+                        st.error(f"❌ Force reinitialization failed: {e}")
     
     def _get_model_index(self, current_model: str, model_list: list) -> int:
         """Get index of current model in list"""

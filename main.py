@@ -27,10 +27,17 @@ def run_streamlit():
     try:
         logger.info("Starting Zenith PDF Chatbot Streamlit interface...")
         
+        # Initialize enhanced components
+        logger.info("Initializing enhanced components...")
+        from src.core.init_enhanced import initialize_zenith_components
+        if not initialize_zenith_components():
+            logger.error("Failed to initialize enhanced components")
+            sys.exit(1)
+        
         import subprocess
         cmd = [
             sys.executable, "-m", "streamlit", "run",
-            "src/ui/enhanced_streamlit_app.py",  # Back to enhanced app with fixes
+            "src/ui/enhanced_streamlit_app.py",
             "--server.port", str(config.app_port),
             "--server.address", "127.0.0.1",
             "--server.headless", "true" if not config.debug_mode else "false"
@@ -128,19 +135,20 @@ def setup_environment():
         except Exception as e:
             logger.warning(f"⚠️ Could not test Qdrant connection: {e}")
         
-        # Test OpenAI connection
-        if config.openai_api_key and config.openai_api_key != "your_openai_api_key_here":
-            try:
-                from src.core.chat_engine import ChatEngine
-                from src.core.vector_store import VectorStore
+        # Test Ollama connection
+        try:
+            from src.core.provider_manager import get_provider_manager
+            provider_manager = get_provider_manager()
+            status = provider_manager.get_provider_status()
+            
+            if status['provider_health']['chat'].get('ollama', {}).get('healthy'):
+                logger.info("✅ Ollama chat provider is healthy")
+            
+            if status['provider_health']['embedding'].get('ollama', {}).get('healthy'):
+                logger.info("✅ Ollama embedding provider is healthy")
                 
-                vector_store = VectorStore()
-                chat_engine = ChatEngine(vector_store)
-                logger.info("✅ OpenAI configuration appears valid")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not test OpenAI connection: {e}")
-        else:
-            logger.warning("⚠️ OpenAI API key not configured")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not test Ollama connection: {e}")
         
     except Exception as e:
         logger.error(f"Error setting up environment: {e}")

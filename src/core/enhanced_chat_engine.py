@@ -13,6 +13,7 @@ from langchain_core.documents import Document
 from .config import config
 from .enhanced_vector_store import UserVectorStore
 from .ollama_integration import get_ollama_manager, OllamaChatEngine
+from .provider_manager import get_provider_manager
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -145,15 +146,21 @@ class OllamaChatProvider(ChatProvider):
 
 
 def get_chat_provider(provider: Optional[str] = None) -> ChatProvider:
-    """Get chat provider based on configuration"""
-    provider = provider or config.chat_provider
-    
-    if provider == "openai":
-        return OpenAIChatProvider()
-    elif provider == "ollama":
-        return OllamaChatProvider()
-    else:
-        raise ValueError(f"Unknown chat provider: {provider}")
+    """Get chat provider based on configuration (uses provider manager)"""
+    try:
+        provider_manager = get_provider_manager()
+        return provider_manager.get_chat_provider(provider)
+    except Exception as e:
+        logger.error(f"Error getting chat provider from manager, falling back: {e}")
+        # Fallback to direct creation
+        provider = provider or config.chat_provider
+        
+        if provider == "openai":
+            return OpenAIChatProvider()
+        elif provider == "ollama":
+            return OllamaChatProvider()
+        else:
+            raise ValueError(f"Unknown chat provider: {provider}")
 
 
 class EnhancedChatEngine:
@@ -182,6 +189,13 @@ class EnhancedChatEngine:
         
         # System prompt
         self.system_prompt = self._get_default_system_prompt()
+        
+        # Register with provider manager for dynamic updates
+        try:
+            provider_manager = get_provider_manager()
+            provider_manager.register_component(self)
+        except Exception as e:
+            logger.warning(f"Could not register with provider manager: {e}")
         
         logger.info(f"Enhanced chat engine initialized for user: {user_id}")
     
@@ -373,11 +387,49 @@ Please answer the user's question based on the provided context. If the context 
         
         return status
     
+    def on_provider_change(self, change_type: str, data: Dict[str, Any]):
+        """Handle provider changes from provider manager"""
+        try:
+            logger.info(f"Chat engine handling provider change: {change_type}")
+            
+            # Reinitialize chat provider if it changed
+            if change_type in ['chat_provider', 'ollama_settings', 'openai_settings', 'force_reinitialize']:
+                old_provider = self.chat_provider
+                
+                # Get new provider
+                self.chat_provider = get_chat_provider()
+                
+                logger.info(f"Chat engine provider updated from {type(old_provider).__name__} to {type(self.chat_provider).__name__}")
+                
+                # Optionally clear conversation history to avoid confusion
+                if change_type == 'chat_provider':
+                    logger.info("Clearing conversation history due to provider switch")
+                    self.conversation_history = []
+            
+        except Exception as e:
+            logger.error(f"Error handling provider change in chat engine: {e}")
+    
+    def reinitialize_providers(self):
+        """Reinitialize providers (called by provider manager)"""
+        try:
+            self.chat_provider = get_chat_provider()
+            logger.info("Chat engine providers reinitialized")
+        except Exception as e:
+            logger.error(f"Error reinitializing chat engine providers: {e}")
+    
     def setup_conversation_chain(self):
         """Setup conversation chain (legacy compatibility)"""
         # This method exists for backward compatibility
         # The new system doesn't require explicit setup
         logger.info("Conversation chain setup completed (legacy compatibility)")
+    
+    def __del__(self):
+        """Cleanup when chat engine is destroyed"""
+        try:
+            provider_manager = get_provider_manager()
+            provider_manager.unregister_component(self)
+        except:
+            pass  # Ignore errors during cleanup
 
 
 # Legacy ChatEngine class for backward compatibility

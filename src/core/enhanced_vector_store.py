@@ -157,6 +157,8 @@ class UserVectorStore:
                     self.qdrant_manager.delete_collection(self.collection_name)
                 else:
                     logger.info(f"Collection {self.collection_name} already exists")
+                    # Ensure indexes exist even if collection exists
+                    self._ensure_indexes()
                     return True
             
             # Create collection with proper vector size
@@ -168,14 +170,39 @@ class UserVectorStore:
             
             if success:
                 # Create indexes for user filtering
-                self.qdrant_manager.create_index(self.collection_name, "user_id", "keyword")
-                self.qdrant_manager.create_index(self.collection_name, "document_id", "keyword")
+                self._ensure_indexes()
                 
             return success
             
         except Exception as e:
             logger.error(f"Error creating collection {self.collection_name}: {e}")
             return False
+    
+    def _ensure_indexes(self):
+        """Ensure all necessary indexes exist"""
+        try:
+            indexes_to_create = [
+                ("user_id", "keyword"),
+                ("document_id", "keyword"),
+                ("chunk_index", "integer"),
+                ("filename", "keyword"),
+                ("embedding_provider", "keyword")
+            ]
+            
+            for field_name, field_type in indexes_to_create:
+                try:
+                    self.qdrant_manager.create_index(
+                        self.collection_name, 
+                        field_name, 
+                        field_type
+                    )
+                    logger.debug(f"Created/verified index for {field_name}")
+                except Exception as e:
+                    # Index might already exist, which is fine
+                    logger.debug(f"Index creation for {field_name} failed (might already exist): {e}")
+            
+        except Exception as e:
+            logger.warning(f"Error ensuring indexes: {e}")
     
     def add_documents(self, documents: List[Document], document_id: Optional[str] = None) -> bool:
         """
@@ -294,14 +321,36 @@ class UserVectorStore:
                     ]
                 )
             
-            # Search in Qdrant
-            search_results = self.qdrant_manager.search_points(
-                collection_name=self.collection_name,
-                query_vector=query_embedding,
-                limit=k,
-                score_threshold=score_threshold,
-                filter_conditions=filter_conditions
-            )
+            # Search in Qdrant with error handling for missing indexes
+            try:
+                search_results = self.qdrant_manager.search_points(
+                    collection_name=self.collection_name,
+                    query_vector=query_embedding,
+                    limit=k,
+                    score_threshold=score_threshold,
+                    filter_conditions=filter_conditions
+                )
+            except Exception as filter_error:
+                if "Index required" in str(filter_error) and user_filter:
+                    logger.warning(f"Index missing for user filtering, falling back to no filter: {filter_error}")
+                    # Fallback: search without user filter
+                    search_results = self.qdrant_manager.search_points(
+                        collection_name=self.collection_name,
+                        query_vector=query_embedding,
+                        limit=k,
+                        score_threshold=score_threshold,
+                        filter_conditions=None
+                    )
+                    
+                    # Filter results manually by user_id
+                    if self.user_id:
+                        filtered_results = []
+                        for result in search_results:
+                            if result.payload.get("user_id") == self.user_id:
+                                filtered_results.append(result)
+                        search_results = filtered_results[:k]
+                else:
+                    raise filter_error
             
             # Convert to LangChain documents
             documents = []
@@ -438,7 +487,7 @@ class UserVectorStore:
         """Get statistics for current user's documents"""
         try:
             if not self.user_id:
-                return {}
+                return {"error": "No user ID provided"}
             
             filter_conditions = models.Filter(
                 must=[
@@ -449,15 +498,24 @@ class UserVectorStore:
                 ]
             )
             
-            # Count user documents
-            total_chunks = self.qdrant_manager.count_points(
-                self.collection_name, 
-                filter_conditions
-            )
+            # Count user documents with error handling
+            try:
+                total_chunks = self.qdrant_manager.count_points(
+                    self.collection_name, 
+                    filter_conditions
+                )
+            except Exception as count_error:
+                if "Index required" in str(count_error):
+                    logger.warning(f"Index missing for user stats, using fallback method: {count_error}")
+                    # Fallback: get all documents and filter manually
+                    all_documents = self.get_user_documents()
+                    total_chunks = len(all_documents)
+                else:
+                    raise count_error
             
             # Get unique document IDs
             documents = self.get_user_documents()
-            document_ids = set(doc.metadata.get("document_id") for doc in documents)
+            document_ids = set(doc.metadata.get("document_id") for doc in documents if doc.metadata.get("document_id"))
             
             return {
                 "total_chunks": total_chunks,
@@ -467,7 +525,7 @@ class UserVectorStore:
             
         except Exception as e:
             logger.error(f"Error getting user stats: {e}")
-            return {}
+            return {"error": str(e), "total_chunks": 0, "total_documents": 0}
     
     def health_check(self) -> bool:
         """Check if the vector store is healthy"""
