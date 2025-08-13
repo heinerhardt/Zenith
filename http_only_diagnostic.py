@@ -258,9 +258,10 @@ if st.button("🔧 Run HTTP-Only Diagnostic", type="primary"):
                                         expected_dims = {
                                             "nomic-embed-text": 768,
                                             "mxbai-embed-large": 1024,
+                                            "rjmalagon/gte-qwen2-1.5b-instruct-embed-f16:latest": 1536,
                                             "all-minilm": 384
                                         }
-                                        expected_dim = expected_dims.get(ollama_embedding_model, 768)
+                                        expected_dim = expected_dims.get(ollama_embedding_model, 1536)
                                     else:
                                         expected_dim = 1536  # OpenAI
                                     
