@@ -37,7 +37,7 @@ config = load_env_config()
 st.write("### 📋 Your Configuration:")
 qdrant_url = config.get("QDRANT_URL", "Not found")
 collection_name = config.get("QDRANT_COLLECTION_NAME", "zenith_documents")
-ollama_model = config.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+ollama_model = config.get("OLLAMA_EMBEDDING_MODEL", "rjmalagon/gte-qwen2-1.5b-instruct-embed-f16:latest")
 
 st.write(f"- **Qdrant URL**: `{qdrant_url}`")
 st.write(f"- **Collection**: `{collection_name}`")
@@ -49,7 +49,8 @@ dimension_map = {
     "mxbai-embed-large": 1024,
     "all-minilm": 384,
     "all-MiniLM-L6-v2": 384,
-    "text-embedding-ada-002": 1536  # OpenAI
+    "text-embedding-ada-002": 1536,  # OpenAI
+    "rjmalagon/gte-qwen2-1.5b-instruct-embed-f16:latest": 1536
 }
 
 target_dimension = dimension_map.get(ollama_model, 768)
