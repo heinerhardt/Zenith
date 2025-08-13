@@ -960,11 +960,59 @@ class ZenithAuthenticatedApp:
         
         has_documents = user_stats.get('total_documents', 0) > 0
         
-        if not has_documents:
+        # Document search filter controls
+        st.markdown("---")
+        st.markdown("#### 🔍 Document Search Settings")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            # Initialize filter setting if not exists
+            if 'filter_user_docs_only' not in st.session_state:
+                st.session_state.filter_user_docs_only = False  # Default to search ALL documents
+            
+            # Checkbox to control document filtering
+            filter_user_only = st.checkbox(
+                "🔒 Search only my uploaded documents",
+                value=st.session_state.filter_user_docs_only,
+                key="user_doc_filter_checkbox",
+                help="When unchecked, search will include all documents in the system. When checked, search only your uploaded documents."
+            )
+            st.session_state.filter_user_docs_only = filter_user_only
+            
+            # Show info about current search scope
+            if filter_user_only:
+                if has_documents:
+                    st.info(f"🔒 Searching only your {user_stats.get('total_documents', 0)} uploaded documents")
+                else:
+                    st.warning("🔒 You have no uploaded documents. Consider unchecking to search all system documents.")
+            else:
+                # Try to get total document count across all users
+                try:
+                    total_docs = st.session_state.vector_store.get_total_document_count()
+                    st.info(f"🌐 Searching ALL documents in the system ({total_docs} total documents from all users)")
+                except:
+                    st.info("🌐 Searching ALL documents in the system")
+        
+        with col2:
+            # Show document stats
+            if has_documents:
+                st.metric("Your Docs", user_stats.get('total_documents', 0))
+        
+        if not has_documents and filter_user_only:
             st.markdown('<div class="info-box">', unsafe_allow_html=True)
-            st.markdown("🤖 You can chat with me even without uploading documents! "
-                       "I can help with general questions, and when you upload PDFs, "
-                       "I'll be able to answer questions about their content too.")
+            st.markdown("⚠️ You have no uploaded documents and filtering is enabled. "
+                       "Either upload documents or uncheck the filter above to search all system documents.")
+            st.markdown('</div>', unsafe_allow_html=True)
+        elif not filter_user_only:
+            st.markdown('<div class="info-box">', unsafe_allow_html=True)
+            st.markdown("🌐 You're searching ALL documents in the system! "
+                       "This includes documents uploaded by other users. "
+                       "Check the box above to search only your documents.")
+            st.markdown('</div>', unsafe_allow_html=True)
+        elif has_documents:
+            st.markdown('<div class="info-box">', unsafe_allow_html=True)
+            st.markdown("🔒 Searching only your uploaded documents. "
+                       "Uncheck the box above to search all system documents.")
             st.markdown('</div>', unsafe_allow_html=True)
         
         # Display chat history
@@ -1004,7 +1052,9 @@ class ZenithAuthenticatedApp:
             
             if submitted and user_input.strip():
                 try:
-                    self.handle_user_input(user_input.strip(), has_documents)
+                    # Pass the user filter preference to the handler
+                    should_use_rag = has_documents if filter_user_only else True  # Use RAG if there are any docs in system
+                    self.handle_user_input(user_input.strip(), should_use_rag, filter_user_only)
                 except Exception as e:
                     st.error(f"Error handling input: {str(e)}")
                     logger.error(f"Input handling error: {e}")
@@ -1060,8 +1110,8 @@ class ZenithAuthenticatedApp:
                                 st.markdown(f"*Content:* {source.get('content', '')}")
                                 st.markdown("---")
     
-    def handle_user_input(self, user_input: str, has_documents: bool):
-        """Handle user input and generate response - FIXED VERSION"""
+    def handle_user_input(self, user_input: str, use_rag: bool, filter_user_only: bool = True):
+        """Handle user input and generate response - UPDATED VERSION with user filter"""
         # Add user message to chat history and session
         self.add_message_to_current_session("user", user_input)
         
@@ -1077,11 +1127,12 @@ class ZenithAuthenticatedApp:
                         vector_store=st.session_state.vector_store
                     )
                 
-                # Get response from chat engine
-                logger.info(f"Sending chat request - use_rag: {has_documents}")
+                # Get response from chat engine with user filter preference
+                logger.info(f"Sending chat request - use_rag: {use_rag}, filter_user_only: {filter_user_only}")
                 response = st.session_state.chat_engine.chat(
                     user_input, 
-                    use_rag=has_documents
+                    use_rag=use_rag,
+                    user_filter=filter_user_only
                 )
                 
                 # Debug: Log response structure

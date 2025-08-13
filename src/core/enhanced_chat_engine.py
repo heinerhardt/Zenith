@@ -250,7 +250,8 @@ When no documents are available, you can still assist with general questions usi
     def chat(self, 
              message: str, 
              use_rag: bool = True,
-             max_context_messages: int = 10) -> Dict[str, Any]:
+             max_context_messages: int = 10,
+             user_filter: bool = False) -> Dict[str, Any]:
         """
         Generate chat response with optional RAG
         
@@ -258,6 +259,7 @@ When no documents are available, you can still assist with general questions usi
             message: User message
             use_rag: Whether to use RAG for context
             max_context_messages: Maximum context messages to include
+            user_filter: Whether to filter documents by current user only (False = search all documents)
             
         Returns:
             Dict with answer and source documents
@@ -276,11 +278,11 @@ When no documents are available, you can still assist with general questions usi
             enhanced_prompt = self.system_prompt
             
             if use_rag and self.vector_store:
-                # Search for relevant documents
+                # Search for relevant documents with user filter preference
                 relevant_docs = self.vector_store.similarity_search(
                     query=message,
                     k=config.max_chunks_per_query,
-                    user_filter=True  # Filter by user
+                    user_filter=user_filter  # Use provided filter setting
                 )
                 
                 if relevant_docs:
@@ -300,9 +302,16 @@ When no documents are available, you can still assist with general questions usi
                     
                     # Enhance system prompt with context
                     context_text = "\n\n".join(context_chunks)
+                    
+                    # Customize prompt based on search scope
+                    if user_filter:
+                        context_source = "USER'S DOCUMENTS"
+                    else:
+                        context_source = "SYSTEM DOCUMENTS (ALL USERS)"
+                    
                     enhanced_prompt = f"""{self.system_prompt}
 
-CONTEXT FROM USER'S DOCUMENTS:
+CONTEXT FROM {context_source}:
 {context_text}
 
 Please answer the user's question based on the provided context. If the context doesn't contain relevant information, mention that and provide what help you can with your general knowledge."""

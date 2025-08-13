@@ -555,6 +555,31 @@ class UserVectorStore:
             logger.error(f"Error deleting user documents: {e}")
             return False
     
+    def get_total_document_count(self) -> int:
+        """
+        Get total document count across all users
+        
+        Returns:
+            Total number of documents in the system
+        """
+        try:
+            # Count all documents without user filter
+            result = self.qdrant_manager.scroll_points(
+                collection_name=self.collection_name,
+                limit=1,
+                filter_conditions=None,
+                with_vectors=False,
+                with_payload=False
+            )
+            
+            # Get collection info for total count
+            collection_info = self.qdrant_manager.client.get_collection(self.collection_name)
+            return collection_info.vectors_count
+            
+        except Exception as e:
+            logger.error(f"Error getting total document count: {e}")
+            return 0
+    
     def get_user_stats(self) -> Dict[str, Any]:
         """Get statistics for current user's documents"""
         try:
