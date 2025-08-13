@@ -310,6 +310,8 @@ class ProviderManager:
     def _force_reinitialize_all(self):
         """Force reinitialize all providers"""
         try:
+            logger.info("Provider manager starting force reinitialization")
+            
             # Clear all provider caches
             self._chat_providers.clear()
             self._embedding_providers.clear()
@@ -319,13 +321,20 @@ class ProviderManager:
             self._current_chat_provider = settings.preferred_chat_provider
             self._current_embedding_provider = settings.preferred_embedding_provider
             
-            self._ensure_chat_provider(self._current_chat_provider)
-            self._ensure_embedding_provider(self._current_embedding_provider)
+            logger.info(f"Reinitializing chat provider: {self._current_chat_provider}")
+            chat_success = self._ensure_chat_provider(self._current_chat_provider)
             
-            logger.info("Force reinitialized all providers")
+            logger.info(f"Reinitializing embedding provider: {self._current_embedding_provider}")
+            embedding_success = self._ensure_embedding_provider(self._current_embedding_provider)
+            
+            if chat_success and embedding_success:
+                logger.info("Force reinitialized all providers successfully")
+            else:
+                logger.warning(f"Force reinitialization completed with issues - Chat: {chat_success}, Embedding: {embedding_success}")
             
         except Exception as e:
             logger.error(f"Error during force reinitialization: {e}")
+            raise  # Re-raise to propagate the error
     
     def _notify_components_of_changes(self, change_type: str, data: Dict[str, Any]):
         """Notify registered components of provider changes"""

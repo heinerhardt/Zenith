@@ -541,10 +541,17 @@ class EnhancedSettingsManager:
     def force_reinitialize_providers(self) -> Tuple[bool, str]:
         """Force reinitialization of all providers"""
         try:
+            logger.info("Starting force reinitialization of providers")
             settings = self._current_settings
             
-            # Force reinitialize Ollama if enabled
-            if settings.ollama_enabled:
+            # Force reinitialize only the preferred providers
+            provider_results = []
+            
+            # Only test Ollama if it's enabled AND it's the preferred provider
+            if (settings.ollama_enabled and 
+                (settings.preferred_chat_provider == "ollama" or settings.preferred_embedding_provider == "ollama")):
+                
+                logger.info("Testing Ollama configuration...")
                 # First, do a quick check to see if models are already available
                 models_available, models_message, models_status = self.check_ollama_models_availability(settings)
                 
@@ -558,15 +565,25 @@ class EnhancedSettingsManager:
                     ollama_result = self._test_ollama_configuration(settings, skip_model_pull=True)
                 
                 if not ollama_result[0]:
+                    logger.error(f"Ollama test failed: {ollama_result[1]}")
                     return False, f"Ollama reinitialization failed: {ollama_result[1]}"
+                
+                provider_results.append(f"Ollama: {ollama_result[1]}")
             
-            # Force reinitialize OpenAI if API key is set
-            if settings.openai_api_key:
+            # Only test OpenAI if it's the preferred provider and API key is set
+            if ((settings.preferred_chat_provider == "openai" or 
+                 settings.preferred_embedding_provider == "openai") and settings.openai_api_key):
+                
+                logger.info("Testing OpenAI configuration...")
                 openai_result = self._test_openai_configuration(settings)
                 if not openai_result[0]:
+                    logger.error(f"OpenAI test failed: {openai_result[1]}")
                     return False, f"OpenAI reinitialization failed: {openai_result[1]}"
+                
+                provider_results.append(f"OpenAI: {openai_result[1]}")
             
             # Notify all callbacks to force reinitialization
+            logger.info("Notifying provider manager to reinitialize...")
             self._notify_callbacks('force_reinitialize', {
                 'chat_provider': settings.preferred_chat_provider,
                 'embedding_provider': settings.preferred_embedding_provider,
@@ -574,8 +591,9 @@ class EnhancedSettingsManager:
                 'timestamp': datetime.now().isoformat()
             })
             
-            logger.info("Force reinitialization completed successfully")
-            return True, "All providers reinitialized successfully"
+            result_message = f"Reinitialized: {', '.join(provider_results)}" if provider_results else "No providers needed reinitialization"
+            logger.info(f"Force reinitialization completed successfully: {result_message}")
+            return True, result_message
             
         except Exception as e:
             logger.error(f"Error during force reinitialization: {e}")

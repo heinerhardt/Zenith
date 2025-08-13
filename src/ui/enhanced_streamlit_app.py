@@ -1412,14 +1412,37 @@ class ZenithAuthenticatedApp:
             if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True):
                 with st.spinner("🔄 Reinitializing all providers..."):
                     try:
-                        success, message = settings_manager.force_reinitialize_providers()
+                        import signal
+                        import threading
                         
-                        if success:
-                            st.success(f"✅ {message}")
-                            time.sleep(2)
-                            st.rerun()
+                        # Add timeout to prevent hanging
+                        result = {"success": False, "message": "Timeout"}
+                        
+                        def reinit_with_timeout():
+                            try:
+                                success, message = settings_manager.force_reinitialize_providers()
+                                result["success"] = success
+                                result["message"] = message
+                            except Exception as e:
+                                result["success"] = False
+                                result["message"] = str(e)
+                        
+                        # Run reinitialization in a thread with timeout
+                        thread = threading.Thread(target=reinit_with_timeout)
+                        thread.daemon = True
+                        thread.start()
+                        thread.join(timeout=30)  # 30 second timeout
+                        
+                        if thread.is_alive():
+                            st.error("❌ Force reinitialization timed out after 30 seconds")
                         else:
-                            st.error(f"❌ {message}")
+                            if result["success"]:
+                                st.success(f"✅ {result['message']}")
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {result['message']}")
+                                
                     except Exception as e:
                         st.error(f"❌ Force reinitialization failed: {e}")
                         logger.error(f"Force reinitialization error: {e}")
