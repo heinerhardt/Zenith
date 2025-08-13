@@ -355,29 +355,59 @@ class EnhancedSettingsManager:
                 # Check what changed and needs reinitialization
                 provider_changes = self._detect_provider_changes(old_settings, settings_dict)
                 
-                # Test new provider configurations before saving
-                validation_result = self._validate_provider_configurations(new_settings, provider_changes)
-                if not validation_result[0]:
-                    return validation_result
+                # For settings updates, skip time-consuming provider validation to avoid hanging
+                # We'll do a quick validation instead
+                quick_validation_result = self._quick_validate_provider_configurations(new_settings, provider_changes)
+                if not quick_validation_result[0]:
+                    return quick_validation_result
                 
                 # Save to Qdrant
                 if self._save_settings(new_settings):
                     self._current_settings = new_settings
                     
-                    # Apply provider changes dynamically
+                    # Apply provider changes dynamically (without heavy validation)
                     self._apply_provider_changes(provider_changes, new_settings)
                     
                     # Update global config for backward compatibility
                     self._update_global_config(new_settings)
                     
                     logger.info(f"Settings updated with provider changes: {list(updates.keys())}")
-                    return True, "Settings updated successfully with provider reinitialization"
+                    return True, "Settings updated successfully. Use 'Force Reinitialize' to test providers."
                 else:
                     return False, "Failed to save settings"
                     
             except Exception as e:
                 logger.error(f"Error updating settings: {e}")
                 return False, f"Update failed: {str(e)}"
+    
+    def quick_update_settings(self, updates: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Quick settings update that bypasses all validation and provider testing
+        Use this when the normal update_settings() method hangs
+        """
+        with self._lock:
+            try:
+                logger.info(f"Quick settings update: {list(updates.keys())}")
+                
+                # Apply updates directly without validation
+                settings_dict = self._current_settings.to_dict()
+                settings_dict.update(updates)
+                settings_dict["updated_at"] = datetime.now()
+                
+                # Create new settings object
+                new_settings = SystemSettings.from_dict(settings_dict)
+                
+                # Save directly without validation
+                if self._save_settings(new_settings):
+                    self._current_settings = new_settings
+                    logger.info("Quick settings update completed - use 'Force Reinitialize' to test providers")
+                    return True, "Settings saved successfully (validation skipped)"
+                else:
+                    return False, "Failed to save settings"
+                    
+            except Exception as e:
+                logger.error(f"Error in quick settings update: {e}")
+                return False, f"Quick update failed: {str(e)}"
     
     def _detect_provider_changes(self, old_settings: Dict[str, Any], new_settings: Dict[str, Any]) -> Dict[str, bool]:
         """Detect which providers need reinitialization"""
@@ -440,6 +470,65 @@ class EnhancedSettingsManager:
                 return False, f"OpenAI validation failed: {openai_result[1]}"
         
         return True, "All provider configurations validated successfully"
+    
+    def _quick_validate_provider_configurations(self, new_settings: SystemSettings, changes: Dict[str, bool]) -> Tuple[bool, str]:
+        """Quick validation without time-consuming model checks"""
+        try:
+            # Only do basic validation - no model pulling or network tests
+            
+            # Check if required fields are present
+            if self.is_ollama_enabled_effective(new_settings):
+                if not new_settings.ollama_endpoint:
+                    return False, "Ollama endpoint is required when Ollama is enabled"
+                if not new_settings.ollama_chat_model:
+                    return False, "Ollama chat model is required when Ollama is enabled"
+                if not new_settings.ollama_embedding_model:
+                    return False, "Ollama embedding model is required when Ollama is enabled"
+            
+            # Check OpenAI settings if it's going to be used
+            needs_openai = (
+                self.get_effective_chat_provider(new_settings) == "openai" or 
+                self.get_effective_embedding_provider(new_settings) == "openai"
+            )
+            
+            if needs_openai and not new_settings.openai_api_key:
+                return False, "OpenAI API key is required when OpenAI is the selected provider"
+            
+            logger.info("Quick provider validation passed - detailed validation available via 'Force Reinitialize'")
+            return True, "Basic provider configuration validated"
+            
+        except Exception as e:
+            logger.error(f"Error in quick validation: {e}")
+            return False, f"Validation error: {str(e)}"
+    
+    def _validate_provider_configurations(self, new_settings: SystemSettings, changes: Dict[str, bool]) -> Tuple[bool, str]:
+        """Full validation with model checking - use sparingly as it can be slow"""
+        try:
+            logger.info("Performing full provider validation (this may take time)")
+            
+            # Test Ollama if enabled or settings changed
+            if self.is_ollama_enabled_effective(new_settings) and (changes['ollama_settings_changed'] or changes['ollama_enabled_changed']):
+                ollama_result = self._test_ollama_configuration(new_settings, skip_model_pull=True)  # Skip model pull to avoid hanging
+                if not ollama_result[0]:
+                    return False, f"Ollama validation failed: {ollama_result[1]}"
+            
+            # Test OpenAI if it's the selected provider or settings changed
+            needs_openai = (
+                self.get_effective_chat_provider(new_settings) == "openai" or 
+                self.get_effective_embedding_provider(new_settings) == "openai" or
+                changes['openai_settings_changed']
+            )
+            
+            if needs_openai and new_settings.openai_api_key:
+                openai_result = self._test_openai_configuration(new_settings)
+                if not openai_result[0]:
+                    return False, f"OpenAI validation failed: {openai_result[1]}"
+            
+            return True, "All provider configurations validated successfully"
+            
+        except Exception as e:
+            logger.error(f"Error in provider validation: {e}")
+            return False, f"Provider validation failed: {str(e)}"
     
     def check_ollama_models_availability(self, settings: SystemSettings) -> Tuple[bool, str, Dict[str, bool]]:
         """Quick check if Ollama models are available without attempting to pull them"""
@@ -863,6 +952,9 @@ def get_enhanced_settings_manager() -> EnhancedSettingsManager:
     if _enhanced_settings_manager is None:
         _enhanced_settings_manager = EnhancedSettingsManager()
     return _enhanced_settings_manager
+
+
+def get_enhanced_settings_manager() -> EnhancedSettingsManager:
 
 
 # Backward compatibility
