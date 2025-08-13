@@ -955,6 +955,11 @@ def get_enhanced_settings_manager() -> EnhancedSettingsManager:
 
 
 def get_enhanced_settings_manager() -> EnhancedSettingsManager:
+    """Get enhanced settings manager instance"""
+    global _enhanced_settings_manager
+    if _enhanced_settings_manager is None:
+        _enhanced_settings_manager = EnhancedSettingsManager()
+    return _enhanced_settings_manager
 
 
 # Backward compatibility
