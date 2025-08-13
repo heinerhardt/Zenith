@@ -1,22 +1,3 @@
-with col2:
-            # Fixed Force Reinitialize button - simplified version to prevent infinite loops
-            if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True):
-                
-                # Perform reinitialization immediately without complex state management
-                with st.spinner("🔄 Reinitializing all providers..."):
-                    try:
-                        settings_manager = get_enhanced_settings_manager()
-                        success, message = settings_manager.force_reinitialize_providers()
-                        
-                        if success:
-                            st.success(f"✅ {message}")
-                        else:
-                            st.error(f"❌ {message}")
-                            
-                    except Exception as e:
-                        st.error(f"❌ Force reinitialization failed: {e}")
-                        logger.error(f"Force reinitialization error: {e}")
-
 """
 Enhanced Streamlit Web Interface for Zenith PDF Chatbot
 Includes authentication, role-based access, and improved features
