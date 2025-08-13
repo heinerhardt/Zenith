@@ -95,9 +95,31 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         dimensions = {
             "nomic-embed-text": 768,
             "mxbai-embed-large": 1024,
-            "all-minilm": 384
+            "all-minilm": 384,
+            "all-MiniLM-L6-v2": 384,
+            "llama2": 1024,  # Some Ollama setups use llama2 for embeddings
+            "mistral": 1024,
+            "codellama": 1024,
+            "text-embedding-ada-002": 1536,  # OpenAI fallback
         }
-        return dimensions.get(self.model_name, 384)
+        
+        # Try to get actual dimension by testing
+        try:
+            test_embedding = self.embed_text("test")
+            actual_dimension = len(test_embedding)
+            
+            # If we got a dimension and it's different from our map, log it
+            expected = dimensions.get(self.model_name, 384)
+            if actual_dimension != expected:
+                logger.warning(f"Model {self.model_name}: expected {expected} dimensions, "
+                              f"but got {actual_dimension}. Using actual dimension.")
+                return actual_dimension
+                
+            return actual_dimension
+            
+        except Exception as e:
+            logger.warning(f"Could not test embedding dimension for {self.model_name}: {e}")
+            return dimensions.get(self.model_name, 384)
 
 
 def get_embedding_provider(provider: Optional[str] = None) -> EmbeddingProvider:
@@ -177,6 +199,56 @@ class UserVectorStore:
         except Exception as e:
             logger.error(f"Error creating collection {self.collection_name}: {e}")
             return False
+    
+    def check_dimension_compatibility(self) -> tuple[bool, str, int, int]:
+        """
+        Check if current collection dimensions match current embedding provider
+        Returns: (is_compatible, message, expected_dim, actual_dim)
+        """
+        try:
+            if not self.qdrant_manager.collection_exists(self.collection_name):
+                return True, "Collection does not exist", 0, 0
+            
+            # Get collection info
+            collection_info = self.qdrant_manager.client.get_collection(self.collection_name)
+            collection_dim = collection_info.config.params.vectors.size
+            
+            # Get current provider dimension
+            provider_dim = self.embedding_provider.get_dimension()
+            
+            if collection_dim == provider_dim:
+                return True, "Dimensions match", collection_dim, provider_dim
+            else:
+                return False, f"Dimension mismatch: collection expects {collection_dim}, provider gives {provider_dim}", collection_dim, provider_dim
+                
+        except Exception as e:
+            return False, f"Error checking dimensions: {e}", 0, 0
+    
+    def fix_dimension_mismatch(self, backup_documents: bool = False) -> tuple[bool, str]:
+        """
+        Fix dimension mismatch by recreating collection
+        Returns: (success, message)
+        """
+        try:
+            compatible, message, collection_dim, provider_dim = self.check_dimension_compatibility()
+            
+            if compatible:
+                return True, "No dimension mismatch to fix"
+            
+            logger.info(f"Fixing dimension mismatch: {message}")
+            
+            # For simplicity, just recreate without backup for now
+            # In production, you'd want to implement proper backup/restore
+            success = self.create_collection(force_recreate=True)
+            
+            if not success:
+                return False, "Failed to recreate collection"
+            
+            return True, f"Collection recreated with correct dimensions ({provider_dim}). You'll need to re-upload your documents."
+            
+        except Exception as e:
+            logger.error(f"Error fixing dimension mismatch: {e}")
+            return False, f"Failed to fix dimension mismatch: {e}"
     
     def _ensure_indexes(self):
         """Ensure all necessary indexes exist"""
