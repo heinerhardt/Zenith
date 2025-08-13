@@ -182,7 +182,32 @@ class EnhancedChatEngine:
         """
         self.user_id = user_id
         self.vector_store = vector_store
-        self.chat_provider = get_chat_provider(chat_provider)
+        
+        # Initialize chat provider with better error handling
+        try:
+            self.chat_provider = get_chat_provider(chat_provider)
+            logger.info(f"Chat provider initialized: {type(self.chat_provider).__name__}")
+        except Exception as e:
+            logger.error(f"Failed to initialize chat provider: {e}")
+            # Try fallback initialization
+            try:
+                from ..core.config import config
+                fallback_provider = config.chat_provider
+                logger.warning(f"Trying fallback provider: {fallback_provider}")
+                
+                if fallback_provider == "openai":
+                    from .openai_integration import OpenAIChatProvider
+                    self.chat_provider = OpenAIChatProvider()
+                elif fallback_provider == "ollama":
+                    from .ollama_integration import OllamaChatProvider
+                    self.chat_provider = OllamaChatProvider()
+                else:
+                    raise ValueError(f"No valid chat provider available")
+                    
+                logger.info(f"Fallback chat provider initialized: {type(self.chat_provider).__name__}")
+            except Exception as fallback_error:
+                logger.error(f"Fallback provider initialization failed: {fallback_error}")
+                raise RuntimeError(f"Cannot initialize any chat provider: {e}, fallback: {fallback_error}")
         
         # Conversation history
         self.conversation_history: List[ChatMessage] = []
@@ -287,7 +312,29 @@ Please answer the user's question based on the provided context. If the context 
             context_messages.append(user_message)
             
             # Generate response
-            response_content = self.chat_provider.chat(context_messages, enhanced_prompt)
+            try:
+                response_content = self.chat_provider.chat(context_messages, enhanced_prompt)
+            except Exception as provider_error:
+                logger.error(f"Chat provider error: {provider_error}")
+                # Try to provide a helpful error message
+                if "connection" in str(provider_error).lower() or "timeout" in str(provider_error).lower():
+                    return {
+                        "answer": "I'm sorry, but I'm having trouble connecting to the AI service. Please check if the AI provider is running and try again.",
+                        "source_documents": source_documents,
+                        "error": f"Connection error: {str(provider_error)}"
+                    }
+                elif "api" in str(provider_error).lower() or "key" in str(provider_error).lower():
+                    return {
+                        "answer": "I'm sorry, but there's an issue with the AI service configuration. Please check the API key settings.",
+                        "source_documents": source_documents,
+                        "error": f"API error: {str(provider_error)}"
+                    }
+                else:
+                    return {
+                        "answer": "I'm sorry, but I encountered an error while generating a response. Please try again or contact support.",
+                        "source_documents": source_documents,
+                        "error": f"Provider error: {str(provider_error)}"
+                    }
             
             # Create assistant message
             assistant_message = ChatMessage(
