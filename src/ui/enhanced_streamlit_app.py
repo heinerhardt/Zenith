@@ -1345,118 +1345,84 @@ class ZenithAuthenticatedApp:
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # Add state management for save button
-            save_key = "save_settings_clicked"
-            
-            if st.button("💾 Save AI Model Settings", type="primary", use_container_width=True, key="save_settings_btn"):
-                # Prevent multiple rapid clicks
-                if save_key not in st.session_state:
-                    st.session_state[save_key] = True
-                    
-                    updates = {
-                        "preferred_chat_provider": chat_provider,
-                        "preferred_embedding_provider": embedding_provider,
-                        "ollama_enabled": ollama_enabled,
-                        "ollama_endpoint": ollama_endpoint,
-                        "ollama_chat_model": ollama_chat_model,
-                        "ollama_embedding_model": ollama_embedding_model,
-                        "openai_chat_model": openai_chat_model,
-                        "openai_embedding_model": openai_embedding_model,
-                        "qdrant_mode": qdrant_mode,
-                        "qdrant_collection_name": qdrant_collection
-                    }
-                    
-                    # Add API keys only if they were changed
-                    if openai_api_key and openai_api_key != "***":
-                        updates["openai_api_key"] = openai_api_key
-                    
-                    if qdrant_mode == "local":
-                        updates.update({
-                            "qdrant_local_host": qdrant_host,
-                            "qdrant_local_port": qdrant_port
-                        })
-                    else:
-                        if qdrant_cloud_url:
-                            updates["qdrant_cloud_url"] = qdrant_cloud_url
-                        if qdrant_api_key and qdrant_api_key != "***":
-                            updates["qdrant_cloud_api_key"] = qdrant_api_key
-                    
-                    # Show processing indicator
-                    with st.spinner("💾 Saving settings and reinitializing providers..."):
+            if st.button("💾 Save AI Model Settings", type="primary", use_container_width=True):
+                updates = {
+                    "preferred_chat_provider": chat_provider,
+                    "preferred_embedding_provider": embedding_provider,
+                    "ollama_enabled": ollama_enabled,
+                    "ollama_endpoint": ollama_endpoint,
+                    "ollama_chat_model": ollama_chat_model,
+                    "ollama_embedding_model": ollama_embedding_model,
+                    "openai_chat_model": openai_chat_model,
+                    "openai_embedding_model": openai_embedding_model,
+                    "qdrant_mode": qdrant_mode,
+                    "qdrant_collection_name": qdrant_collection
+                }
+                
+                # Add API keys only if they were changed
+                if openai_api_key and openai_api_key != "***":
+                    updates["openai_api_key"] = openai_api_key
+                
+                if qdrant_mode == "local":
+                    updates.update({
+                        "qdrant_local_host": qdrant_host,
+                        "qdrant_local_port": qdrant_port
+                    })
+                else:
+                    if qdrant_cloud_url:
+                        updates["qdrant_cloud_url"] = qdrant_cloud_url
+                    if qdrant_api_key and qdrant_api_key != "***":
+                        updates["qdrant_cloud_api_key"] = qdrant_api_key
+                
+                # Show processing indicator
+                with st.spinner("💾 Saving settings and reinitializing providers..."):
+                    try:
                         success, message = settings_manager.update_settings(updates)
-                    
-                    if success:
-                        st.success(f"✅ {message}")
                         
-                        # Show what changed
-                        current_settings = settings_manager.get_settings()
-                        changes_detected = []
-                        if chat_provider != current_settings.preferred_chat_provider:
-                            changes_detected.append(f"Chat provider → {chat_provider}")
-                        if embedding_provider != current_settings.preferred_embedding_provider:
-                            changes_detected.append(f"Embedding provider → {embedding_provider}")
-                        if ollama_enabled != current_settings.ollama_enabled:
-                            status = "enabled" if ollama_enabled else "disabled"
-                            changes_detected.append(f"Ollama → {status}")
-                        
-                        if changes_detected:
-                            st.info(f"🔄 **Dynamic changes applied:**\n" + "\n- ".join([""] + changes_detected))
-                            st.info("✨ **No restart required!** Changes have been applied immediately.")
+                        if success:
+                            st.success(f"✅ {message}")
+                            
+                            # Show what changed
+                            current_settings = settings_manager.get_settings()
+                            changes_detected = []
+                            if chat_provider != current_settings.preferred_chat_provider:
+                                changes_detected.append(f"Chat provider → {chat_provider}")
+                            if embedding_provider != current_settings.preferred_embedding_provider:
+                                changes_detected.append(f"Embedding provider → {embedding_provider}")
+                            if ollama_enabled != current_settings.ollama_enabled:
+                                status = "enabled" if ollama_enabled else "disabled"
+                                changes_detected.append(f"Ollama → {status}")
+                            
+                            if changes_detected:
+                                st.info(f"🔄 **Dynamic changes applied:**\n" + "\n- ".join([""] + changes_detected))
+                                st.info("✨ **No restart required!** Changes have been applied immediately.")
+                            else:
+                                st.info("ℹ️ Settings saved successfully. No provider changes detected.")
+                            
+                            # Show updated provider status after a brief delay
+                            time.sleep(2)
+                            st.rerun()
                         else:
-                            st.info("ℹ️ Settings saved successfully. No provider changes detected.")
-                        
-                        # Clear the flag after successful operation
-                        if save_key in st.session_state:
-                            del st.session_state[save_key]
-                        
-                        # Show updated provider status after a brief delay
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
-                        # Clear the flag on error
-                        if save_key in st.session_state:
-                            del st.session_state[save_key]
-            
-            # Show current state if save is in progress
-            if save_key in st.session_state:
-                st.info("💾 Saving settings in progress...")
+                            st.error(f"❌ {message}")
+                    except Exception as e:
+                        st.error(f"❌ Settings save failed: {e}")
+                        logger.error(f"Settings save error: {e}")
         
         with col2:
-            # Add a flag to prevent infinite reinitialization
-            reinit_key = "force_reinit_clicked"
-            
-            if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True, key="force_reinit_btn"):
-                # Set flag to prevent multiple clicks
-                if reinit_key not in st.session_state:
-                    st.session_state[reinit_key] = True
-                    
-                    with st.spinner("🔄 Reinitializing all providers..."):
-                        try:
-                            from src.core.provider_manager import get_provider_manager
-                            provider_manager = get_provider_manager()
-                            success, message = settings_manager.force_reinitialize_providers()
-                            
-                            if success:
-                                st.success(f"✅ {message}")
-                                # Clear the flag after successful operation
-                                if reinit_key in st.session_state:
-                                    del st.session_state[reinit_key]
-                                # Don't rerun immediately, let user see the success message
-                            else:
-                                st.error(f"❌ {message}")
-                                # Clear the flag on error too
-                                if reinit_key in st.session_state:
-                                    del st.session_state[reinit_key]
-                        except Exception as e:
-                            st.error(f"❌ Force reinitialization failed: {e}")
-                            # Clear the flag on exception
-                            if reinit_key in st.session_state:
-                                del st.session_state[reinit_key]
-            
-            # Show current state if reinitialization is in progress
-            if reinit_key in st.session_state:
-                st.info("🔄 Reinitialization in progress...")
+            if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True):
+                with st.spinner("🔄 Reinitializing all providers..."):
+                    try:
+                        success, message = settings_manager.force_reinitialize_providers()
+                        
+                        if success:
+                            st.success(f"✅ {message}")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+                    except Exception as e:
+                        st.error(f"❌ Force reinitialization failed: {e}")
+                        logger.error(f"Force reinitialization error: {e}")
     
     def _get_model_index(self, current_model: str, model_list: list) -> int:
         """Get index of current model in list"""
