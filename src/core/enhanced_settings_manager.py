@@ -121,8 +121,14 @@ class EnhancedSettingsManager:
                                 if k not in ["setting_type", "vector"]}
                     settings = SystemSettings.from_dict(clean_data)
                     
-                    # Apply .env overrides for provider logic
+                    # FORCE APPLY ENV OVERRIDES - this ensures .env settings are respected
                     settings = self._apply_env_overrides(settings)
+                    
+                    # Force save the updated settings back to database
+                    self._save_settings(settings)
+                    logger.info(f"Updated existing settings - Ollama enabled: {settings.ollama_enabled}, "
+                               f"Chat provider: {settings.get_effective_chat_provider()}, "
+                               f"Embedding provider: {settings.get_effective_embedding_provider()}")
                     return settings
             
             # Create default settings if none exist
@@ -185,17 +191,87 @@ class EnhancedSettingsManager:
         if not settings.langsmith_api_key and config.langsmith_api_key:
             settings.langsmith_api_key = config.langsmith_api_key
         
-        # Apply Ollama enabled override from .env if admin hasn't explicitly enabled it
-        if not settings.ollama_enabled and config.ollama_enabled:
-            settings.ollama_enabled = config.ollama_enabled
+        # CRITICAL: Apply Ollama enabled override from .env
+        # This ensures .env OLLAMA_ENABLED=True is respected
+        if config.ollama_enabled and not settings.ollama_enabled:
+            settings.ollama_enabled = True
             logger.info("Ollama enabled via .env configuration")
         
+        # CRITICAL: Force provider selection when Ollama is enabled in .env OR admin
+        if settings.ollama_enabled or config.ollama_enabled:
+            # Force both settings to be consistent
+            settings.ollama_enabled = True
+            settings.preferred_chat_provider = "ollama"
+            settings.preferred_embedding_provider = "ollama"
+            logger.info("Forced provider selection to Ollama due to enablement")
+        
         # Apply Langsmith enabled override from .env if admin hasn't explicitly enabled it
-        if not settings.langsmith_enabled and config.langsmith_enabled:
-            settings.langsmith_enabled = config.langsmith_enabled
+        if config.langsmith_enabled and not settings.langsmith_enabled:
+            settings.langsmith_enabled = True
             logger.info("Langsmith enabled via .env configuration")
         
         return settings
+    
+    def get_effective_chat_provider(self, settings: SystemSettings = None) -> str:
+        """Get effective chat provider considering both admin and .env settings"""
+        from ..core.config import config
+        
+        if settings is None:
+            settings = self._current_settings
+        
+        # If Ollama is enabled in admin OR .env, use Ollama
+        if settings.ollama_enabled or config.ollama_enabled:
+            return "ollama"
+        
+        # Otherwise use admin preference or .env fallback
+        return settings.preferred_chat_provider if settings.preferred_chat_provider != "openai" else config.chat_provider
+    
+    def get_effective_embedding_provider(self, settings: SystemSettings = None) -> str:
+        """Get effective embedding provider considering both admin and .env settings"""
+        from ..core.config import config
+        
+        if settings is None:
+            settings = self._current_settings
+        
+        # If Ollama is enabled in admin OR .env, use Ollama
+        if settings.ollama_enabled or config.ollama_enabled:
+            return "ollama"
+        
+        # Otherwise use admin preference or .env fallback
+        return settings.preferred_embedding_provider if settings.preferred_embedding_provider != "openai" else config.embedding_provider
+    
+    def is_ollama_enabled_effective(self, settings: SystemSettings = None) -> bool:
+        """Check if Ollama is effectively enabled (admin OR .env)"""
+        from ..core.config import config
+        
+        if settings is None:
+            settings = self._current_settings
+        
+        return settings.ollama_enabled or config.ollama_enabled
+    
+    def force_reset_to_env_settings(self) -> bool:
+        """Force reset settings to match .env configuration"""
+        try:
+            logger.info("Force resetting settings to match .env configuration")
+            
+            # Create fresh settings from .env
+            fresh_settings = self._create_default_settings_from_env()
+            
+            # Save to database
+            self._save_settings(fresh_settings)
+            
+            # Update current settings
+            self._current_settings = fresh_settings
+            
+            logger.info(f"Settings reset complete - Ollama enabled: {fresh_settings.ollama_enabled}, "
+                       f"Chat provider: {fresh_settings.get_effective_chat_provider()}, "
+                       f"Embedding provider: {fresh_settings.get_effective_embedding_provider()}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error resetting settings: {e}")
+            return False
     
     def _save_settings(self, settings: SystemSettings) -> bool:
         """Save settings to Qdrant"""
@@ -346,15 +422,15 @@ class EnhancedSettingsManager:
         """Validate new provider configurations before applying"""
         
         # Test Ollama if enabled or settings changed
-        if new_settings.is_ollama_enabled() and (changes['ollama_settings_changed'] or changes['ollama_enabled_changed']):
+        if self.is_ollama_enabled_effective(new_settings) and (changes['ollama_settings_changed'] or changes['ollama_enabled_changed']):
             ollama_result = self._test_ollama_configuration(new_settings, skip_model_pull=False)
             if not ollama_result[0]:
                 return False, f"Ollama validation failed: {ollama_result[1]}"
         
         # Test OpenAI if it's the selected provider or settings changed
         needs_openai = (
-            new_settings.get_effective_chat_provider() == "openai" or 
-            new_settings.get_effective_embedding_provider() == "openai" or
+            self.get_effective_chat_provider(new_settings) == "openai" or 
+            self.get_effective_embedding_provider(new_settings) == "openai" or
             changes['openai_settings_changed']
         )
         
@@ -614,7 +690,7 @@ class EnhancedSettingsManager:
             provider_results = []
             
             # Only test Ollama if it's enabled (using new effective method)
-            if settings.is_ollama_enabled():
+            if self.is_ollama_enabled_effective(settings):
                 
                 logger.info("Testing Ollama configuration...")
                 # First, do a quick check to see if models are already available
@@ -636,8 +712,8 @@ class EnhancedSettingsManager:
                 provider_results.append(f"Ollama: {ollama_result[1]}")
             
             # Only test OpenAI if it's the effective provider and API key is set
-            if ((settings.get_effective_chat_provider() == "openai" or 
-                 settings.get_effective_embedding_provider() == "openai") and settings.openai_api_key):
+            if ((self.get_effective_chat_provider(settings) == "openai" or 
+                 self.get_effective_embedding_provider(settings) == "openai") and settings.openai_api_key):
                 
                 logger.info("Testing OpenAI configuration...")
                 openai_result = self._test_openai_configuration(settings)
@@ -665,9 +741,9 @@ class EnhancedSettingsManager:
             # Notify all callbacks to force reinitialization
             logger.info("Notifying provider manager to reinitialize...")
             self._notify_callbacks('force_reinitialize', {
-                'chat_provider': settings.get_effective_chat_provider(),
-                'embedding_provider': settings.get_effective_embedding_provider(),
-                'ollama_enabled': settings.is_ollama_enabled(),
+                'chat_provider': self.get_effective_chat_provider(settings),
+                'embedding_provider': self.get_effective_embedding_provider(settings),
+                'ollama_enabled': self.is_ollama_enabled_effective(settings),
                 'langsmith_enabled': settings.is_langsmith_enabled(),
                 'timestamp': datetime.now().isoformat()
             })
@@ -684,12 +760,12 @@ class EnhancedSettingsManager:
         """Get current provider status and health"""
         status = {
             'current_providers': {
-                'chat': self._current_settings.get_effective_chat_provider(),
-                'embedding': self._current_settings.get_effective_embedding_provider()
+                'chat': self.get_effective_chat_provider(),
+                'embedding': self.get_effective_embedding_provider()
             },
             'provider_health': {},
             'last_updated': self._current_settings.updated_at.isoformat() if self._current_settings.updated_at else None,
-            'ollama_enabled': self._current_settings.is_ollama_enabled(),
+            'ollama_enabled': self.is_ollama_enabled_effective(),
             'langsmith_enabled': self._current_settings.is_langsmith_enabled()
         }
         
@@ -709,7 +785,7 @@ class EnhancedSettingsManager:
             }
         
         # Check Ollama health
-        if self._current_settings.is_ollama_enabled():
+        if self.is_ollama_enabled_effective():
             ollama_health = self._test_ollama_configuration(self._current_settings, skip_model_pull=True)
             status['provider_health']['ollama'] = {
                 'healthy': ollama_health[0],

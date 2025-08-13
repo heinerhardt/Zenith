@@ -309,48 +309,30 @@ class SystemSettings:
     def get_effective_chat_provider(self) -> str:
         """
         Get the effective chat provider with priority logic:
-        1. If Ollama is enabled (Admin or .env), use Ollama
-        2. Otherwise, use Admin setting or fallback to OpenAI
+        1. If Ollama is enabled in settings, use Ollama
+        2. Otherwise, use the preferred setting
         """
-        from ..core.config import config
-        
-        # Check if Ollama is enabled in Admin settings or .env
-        if self.ollama_enabled or config.ollama_enabled:
+        if self.ollama_enabled:
             return "ollama"
-        
-        # Use Admin setting if different from default, otherwise use .env
-        if self.preferred_chat_provider != "openai":
-            return self.preferred_chat_provider
-        
-        return config.chat_provider
+        return self.preferred_chat_provider
     
     def get_effective_embedding_provider(self) -> str:
         """
         Get the effective embedding provider with priority logic:
-        1. If Ollama is enabled (Admin or .env), use Ollama
-        2. Otherwise, use Admin setting or fallback to OpenAI
+        1. If Ollama is enabled in settings, use Ollama
+        2. Otherwise, use the preferred setting
         """
-        from ..core.config import config
-        
-        # Check if Ollama is enabled in Admin settings or .env
-        if self.ollama_enabled or config.ollama_enabled:
+        if self.ollama_enabled:
             return "ollama"
-        
-        # Use Admin setting if different from default, otherwise use .env
-        if self.preferred_embedding_provider != "openai":
-            return self.preferred_embedding_provider
-        
-        return config.embedding_provider
+        return self.preferred_embedding_provider
     
     def is_ollama_enabled(self) -> bool:
-        """Check if Ollama is enabled in Admin settings or .env"""
-        from ..core.config import config
-        return self.ollama_enabled or config.ollama_enabled
+        """Check if Ollama is enabled in settings"""
+        return self.ollama_enabled
     
     def is_langsmith_enabled(self) -> bool:
-        """Check if Langsmith is enabled in Admin settings or .env"""
-        from ..core.config import config
-        return self.langsmith_enabled or config.langsmith_enabled
+        """Check if Langsmith is enabled in settings"""
+        return self.langsmith_enabled
     
     # System Configuration
     allow_user_registration: bool = True
