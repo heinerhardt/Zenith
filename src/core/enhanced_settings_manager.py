@@ -281,7 +281,7 @@ class EnhancedSettingsManager:
         
         # Test Ollama if enabled or settings changed
         if new_settings.ollama_enabled and (changes['ollama_settings_changed'] or changes['ollama_enabled_changed']):
-            ollama_result = self._test_ollama_configuration(new_settings)
+            ollama_result = self._test_ollama_configuration(new_settings, skip_model_pull=False)
             if not ollama_result[0]:
                 return False, f"Ollama validation failed: {ollama_result[1]}"
         
@@ -299,7 +299,40 @@ class EnhancedSettingsManager:
         
         return True, "All provider configurations validated successfully"
     
-    def _test_ollama_configuration(self, settings: SystemSettings) -> Tuple[bool, str]:
+    def check_ollama_models_availability(self, settings: SystemSettings) -> Tuple[bool, str, Dict[str, bool]]:
+        """Quick check if Ollama models are available without attempting to pull them"""
+        try:
+            from .ollama_integration import OllamaClient
+            
+            client = OllamaClient(settings.ollama_endpoint)
+            if not client.health_check():
+                return False, f"Cannot connect to Ollama at {settings.ollama_endpoint}", {}
+            
+            # Get available models
+            available_models = client.list_models()
+            model_names = [model.name for model in available_models]
+            
+            # Check model availability
+            models_status = {
+                'chat_model': settings.ollama_chat_model in model_names,
+                'embedding_model': settings.ollama_embedding_model in model_names
+            }
+            
+            all_available = all(models_status.values())
+            
+            if all_available:
+                return True, "All required Ollama models are available", models_status
+            else:
+                missing = [name for name, available in [
+                    ('chat', models_status['chat_model']), 
+                    ('embedding', models_status['embedding_model'])
+                ] if not available]
+                return False, f"Missing Ollama models: {', '.join(missing)}", models_status
+                
+        except Exception as e:
+            return False, f"Ollama check failed: {str(e)}", {}
+
+    def _test_ollama_configuration(self, settings: SystemSettings, skip_model_pull: bool = False) -> Tuple[bool, str]:
         """Test Ollama configuration"""
         try:
             from .ollama_integration import OllamaClient
@@ -312,18 +345,32 @@ class EnhancedSettingsManager:
             available_models = client.list_models()
             model_names = [model.name for model in available_models]
             
+            logger.info(f"Available Ollama models: {model_names}")
+            
             # Check chat model
-            if settings.ollama_chat_model not in model_names:
-                # Try to pull the model
-                logger.info(f"Attempting to pull missing chat model: {settings.ollama_chat_model}")
-                if not client.pull_model(settings.ollama_chat_model):
-                    return False, f"Chat model '{settings.ollama_chat_model}' not available and could not be pulled"
+            if settings.ollama_chat_model in model_names:
+                logger.info(f"Chat model '{settings.ollama_chat_model}' is already available")
+            else:
+                if skip_model_pull:
+                    logger.warning(f"Chat model '{settings.ollama_chat_model}' not available (skipping auto-pull)")
+                    return False, f"Chat model '{settings.ollama_chat_model}' not available"
+                else:
+                    # Try to pull the model
+                    logger.info(f"Attempting to pull missing chat model: {settings.ollama_chat_model}")
+                    if not client.pull_model(settings.ollama_chat_model):
+                        return False, f"Chat model '{settings.ollama_chat_model}' not available and could not be pulled"
             
             # Check embedding model
-            if settings.ollama_embedding_model not in model_names:
-                logger.info(f"Attempting to pull missing embedding model: {settings.ollama_embedding_model}")
-                if not client.pull_model(settings.ollama_embedding_model):
-                    return False, f"Embedding model '{settings.ollama_embedding_model}' not available and could not be pulled"
+            if settings.ollama_embedding_model in model_names:
+                logger.info(f"Embedding model '{settings.ollama_embedding_model}' is already available")
+            else:
+                if skip_model_pull:
+                    logger.warning(f"Embedding model '{settings.ollama_embedding_model}' not available (skipping auto-pull)")
+                    return False, f"Embedding model '{settings.ollama_embedding_model}' not available"
+                else:
+                    logger.info(f"Attempting to pull missing embedding model: {settings.ollama_embedding_model}")
+                    if not client.pull_model(settings.ollama_embedding_model):
+                        return False, f"Embedding model '{settings.ollama_embedding_model}' not available and could not be pulled"
             
             return True, "Ollama configuration validated successfully"
             
@@ -498,7 +545,18 @@ class EnhancedSettingsManager:
             
             # Force reinitialize Ollama if enabled
             if settings.ollama_enabled:
-                ollama_result = self._test_ollama_configuration(settings)
+                # First, do a quick check to see if models are already available
+                models_available, models_message, models_status = self.check_ollama_models_availability(settings)
+                
+                if models_available:
+                    logger.info("All Ollama models are already available - skipping detailed validation")
+                    # Just do a quick health check
+                    ollama_result = self._test_ollama_configuration(settings, skip_model_pull=True)
+                else:
+                    logger.info(f"Ollama model status: {models_message}")
+                    # Use skip_model_pull=True to avoid hanging during force reinitialization
+                    ollama_result = self._test_ollama_configuration(settings, skip_model_pull=True)
+                
                 if not ollama_result[0]:
                     return False, f"Ollama reinitialization failed: {ollama_result[1]}"
             
@@ -551,7 +609,7 @@ class EnhancedSettingsManager:
         
         # Check Ollama health
         if self._current_settings.ollama_enabled:
-            ollama_health = self._test_ollama_configuration(self._current_settings)
+            ollama_health = self._test_ollama_configuration(self._current_settings, skip_model_pull=True)
             status['provider_health']['ollama'] = {
                 'healthy': ollama_health[0],
                 'message': ollama_health[1],
@@ -614,7 +672,7 @@ class EnhancedSettingsManager:
             test_settings.ollama_chat_model = self._current_settings.ollama_chat_model
             test_settings.ollama_embedding_model = self._current_settings.ollama_embedding_model
             
-            return self._test_ollama_configuration(test_settings)
+            return self._test_ollama_configuration(test_settings, skip_model_pull=False)
         except Exception as e:
             return False, f"Test failed: {str(e)}"
 
