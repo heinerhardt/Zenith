@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     chat_provider: str = Field(default="openai", env="CHAT_PROVIDER")  # openai or ollama
     embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")  # openai or ollama
     
+    # Langsmith Configuration
+    langsmith_enabled: bool = Field(default=False, env="LANGSMITH_ENABLED")
+    langsmith_api_key: Optional[str] = Field(default=None, env="LANGSMITH_API_KEY")
+    langsmith_project_name: str = Field(default="zenith-pdf-chatbot", env="LANGSMITH_PROJECT_NAME")
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", env="LANGSMITH_ENDPOINT")
+    langsmith_tracing_enabled: bool = Field(default=True, env="LANGSMITH_TRACING_ENABLED")
+    langsmith_evaluation_enabled: bool = Field(default=False, env="LANGSMITH_EVALUATION_ENABLED")
+    
     # Qdrant Configuration
     qdrant_mode: str = Field(default="local", env="QDRANT_MODE")  # local or cloud
     qdrant_url: str = Field(default="localhost", env="QDRANT_URL")

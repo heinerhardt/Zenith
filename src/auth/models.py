@@ -273,9 +273,17 @@ class SystemSettings:
     ollama_chat_model: str = "llama2"
     ollama_embedding_model: str = "nomic-embed-text"
     
-    # Model Selection
+    # Model Selection (Admin settings override .env)
     preferred_chat_provider: str = "openai"
     preferred_embedding_provider: str = "openai"
+    
+    # Langsmith Configuration
+    langsmith_enabled: bool = False
+    langsmith_api_key: Optional[str] = None
+    langsmith_project_name: str = "zenith-pdf-chatbot"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_tracing_enabled: bool = True
+    langsmith_evaluation_enabled: bool = False
     
     # Qdrant Configuration
     qdrant_mode: str = "cloud"  # local or cloud
@@ -297,6 +305,52 @@ class SystemSettings:
     minio_access_key: Optional[str] = None
     minio_secret_key: Optional[str] = None
     minio_secure: bool = False
+    
+    def get_effective_chat_provider(self) -> str:
+        """
+        Get the effective chat provider with priority logic:
+        1. If Ollama is enabled (Admin or .env), use Ollama
+        2. Otherwise, use Admin setting or fallback to OpenAI
+        """
+        from ..core.config import config
+        
+        # Check if Ollama is enabled in Admin settings or .env
+        if self.ollama_enabled or config.ollama_enabled:
+            return "ollama"
+        
+        # Use Admin setting if different from default, otherwise use .env
+        if self.preferred_chat_provider != "openai":
+            return self.preferred_chat_provider
+        
+        return config.chat_provider
+    
+    def get_effective_embedding_provider(self) -> str:
+        """
+        Get the effective embedding provider with priority logic:
+        1. If Ollama is enabled (Admin or .env), use Ollama
+        2. Otherwise, use Admin setting or fallback to OpenAI
+        """
+        from ..core.config import config
+        
+        # Check if Ollama is enabled in Admin settings or .env
+        if self.ollama_enabled or config.ollama_enabled:
+            return "ollama"
+        
+        # Use Admin setting if different from default, otherwise use .env
+        if self.preferred_embedding_provider != "openai":
+            return self.preferred_embedding_provider
+        
+        return config.embedding_provider
+    
+    def is_ollama_enabled(self) -> bool:
+        """Check if Ollama is enabled in Admin settings or .env"""
+        from ..core.config import config
+        return self.ollama_enabled or config.ollama_enabled
+    
+    def is_langsmith_enabled(self) -> bool:
+        """Check if Langsmith is enabled in Admin settings or .env"""
+        from ..core.config import config
+        return self.langsmith_enabled or config.langsmith_enabled
     
     # System Configuration
     allow_user_registration: bool = True
