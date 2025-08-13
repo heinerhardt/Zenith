@@ -28,7 +28,7 @@ def main():
     try:
         # Test connection
         print(f"\n🔌 Testing connection...")
-        health_resp = requests.get(f"{qdrant_url}/health", headers=headers, timeout=10)
+        health_resp = requests.get(f"{qdrant_url}/healthz", headers=headers, timeout=10)
         
         if health_resp.status_code == 200:
             print("✅ Connected to Qdrant Cloud!")
