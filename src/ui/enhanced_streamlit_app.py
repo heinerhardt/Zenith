@@ -138,45 +138,26 @@ st.markdown("""
     background-color: #fafafa;
 }
 
-/* AGGRESSIVELY HIDE ALL UNWANTED NAVIGATION */
-div[data-testid="stSidebar"] > div > div > div > div:first-child {
+/* TARGETED NAVIGATION HIDING - PRESERVES SIDEBAR FUNCTIONALITY */
+/* Hide only page navigation, preserve sidebar */
+[data-testid="stSidebarNav"], 
+[data-testid="stSidebarNavItems"],
+.css-1544g2n,
+.stSelectbox[data-baseweb="select"] {
     display: none !important;
+}
+
+/* Preserve sidebar container and content */
+[data-testid="stSidebar"] {
+    display: block !important;
+}
+
+section[data-testid="stSidebar"] {
+    display: block !important;
 }
 
 /* Hide multipage navigation if it appears */
 .css-1kyxreq, .css-12oz5g7, .css-1v3fvcr, .css-1e5imcs {
-    display: none !important;
-}
-
-/* Hide any page navigation elements */
-[data-testid="stSidebarNav"], 
-[data-testid="stSidebarNavItems"],
-.css-1544g2n,
-.css-1d391kg,
-.css-1rs6os,
-.css-17eq0hr,
-.css-pkbazv,
-.css-1emrehy {
-    display: none !important;
-}
-
-/* Force clean sidebar - hide first element */
-section[data-testid="stSidebar"] > div:first-child > div:first-child > div:first-child {
-    display: none !important;
-}
-
-/* Hide any selectbox or navigation in sidebar */
-section[data-testid="stSidebar"] div[data-testid="stSelectbox"] {
-    display: none !important;
-}
-
-/* Hide page selector if it exists */
-div[data-baseweb="select"] {
-    display: none !important;
-}
-
-/* Additional safety - hide any potential page navigation */
-.stSelectbox, .css-1wa3eu0, .css-10trblm {
     display: none !important;
 }
 </style>
@@ -475,153 +456,268 @@ class ZenithAuthenticatedApp:
             self.render_file_upload_interface()
     
     def render_sidebar_info(self):
-        """Render sidebar information - CLEAN VERSION"""
-        # Force hide any navigation with JavaScript
+        """Render sidebar information - FIXED VERSION"""
+        
+        # SAFE CSS - Only hide specific navigation elements, not the entire sidebar
         st.markdown("""
-        <script>
-        setTimeout(function() {
-            // Hide any page navigation elements
-            const elements = document.querySelectorAll('[data-testid="stSidebarNav"], [data-testid="stSidebarNavItems"], .css-1544g2n, .stSelectbox');
-            elements.forEach(el => el.style.display = 'none');
-            
-            // Hide first child of sidebar if it contains navigation
-            const sidebar = document.querySelector('[data-testid="stSidebar"]');
-            if (sidebar) {
-                const firstChild = sidebar.querySelector('div > div > div > div:first-child');
-                if (firstChild && (firstChild.innerText.includes('Enhanced') || firstChild.innerText.includes('MinIO'))) {
-                    firstChild.style.display = 'none';
-                }
-            }
-        }, 100);
-        </script>
+        <style>
+        /* Hide only page navigation, preserve sidebar functionality */
+        [data-testid="stSidebarNav"], 
+        [data-testid="stSidebarNavItems"],
+        .css-1544g2n,
+        .stSelectbox[data-baseweb="select"] {
+            display: none !important;
+        }
+        
+        /* Preserve sidebar container and content */
+        [data-testid="stSidebar"] {
+            display: block !important;
+        }
+        
+        section[data-testid="stSidebar"] {
+            display: block !important;
+        }
+        </style>
         """, unsafe_allow_html=True)
         
-        # Clear any previous sidebar content to prevent unwanted navigation
+        # Clean initialization - Remove any problematic session state
         if hasattr(st.session_state, 'page_selector'):
             del st.session_state.page_selector
         
+        # Header
         st.sidebar.markdown("### 📚 Zenith PDF Chatbot")
+        st.sidebar.markdown("---")
         
-        # Chat History Section
-        self.render_chat_history_sidebar()
+        # Chat History Section with Error Handling
+        try:
+            self.render_chat_history_sidebar_fixed()
+        except Exception as e:
+            st.sidebar.error(f"Chat history error: {str(e)}")
+            logger.error(f"Chat history sidebar error: {e}")
         
-        # Simple document info (only if documents are processed)
-        if st.session_state.documents_processed and st.session_state.file_stats:
+        # Document Info Section (only if documents exist)
+        if st.session_state.get('documents_processed', False) and st.session_state.get('file_stats'):
+            st.sidebar.markdown("---")
             st.sidebar.markdown("### 📄 Document Info")
-            stats = st.session_state.file_stats
-            st.sidebar.markdown(f"**Files:** {len(stats.get('processed_files', []))}")
-            st.sidebar.markdown(f"**Pages:** {stats.get('total_documents', 0)}")
-            st.sidebar.markdown(f"**Chunks:** {stats.get('total_chunks', 0)}")
+            try:
+                stats = st.session_state.file_stats
+                st.sidebar.markdown(f"**Files:** {len(stats.get('processed_files', []))}")
+                st.sidebar.markdown(f"**Pages:** {stats.get('total_documents', 0)}")
+                st.sidebar.markdown(f"**Chunks:** {stats.get('total_chunks', 0)}")
+            except Exception as e:
+                st.sidebar.error("Error displaying document stats")
+                logger.error(f"Document stats error: {e}")
         
-        # Optional: Show document statistics for admin users only
+        # Admin Section (for admin users only)
         user_info = st.session_state.get('user_info', {})
         if user_info.get('role') == 'administrator':
-            if st.sidebar.checkbox("Show Advanced Stats", value=False):
-                if st.session_state.chat_engine:
-                    stats = st.session_state.chat_engine.get_user_document_stats()
-                    st.sidebar.markdown("### 📊 Document Statistics")
-                    st.sidebar.json(stats)
+            st.sidebar.markdown("---")
+            if st.sidebar.checkbox("🔧 Show Advanced Stats", value=False, key="admin_stats_checkbox"):
+                try:
+                    if st.session_state.get('chat_engine'):
+                        stats = st.session_state.chat_engine.get_user_document_stats()
+                        st.sidebar.markdown("### 📊 Document Statistics")
+                        st.sidebar.json(stats)
+                except Exception as e:
+                    st.sidebar.error("Error loading advanced stats")
+                    logger.error(f"Advanced stats error: {e}")
     
-    def render_chat_history_sidebar(self):
-        """Render chat history in sidebar"""
+    def render_chat_history_sidebar_fixed(self):
+        """Render chat history in sidebar - FIXED VERSION"""
         st.sidebar.markdown("### 💬 Chat History")
         
         user_id = st.session_state.user_info.get('id')
         if not user_id:
+            st.sidebar.error("User ID not found")
             return
         
-        # New Chat button
-        if st.sidebar.button("🆕 New Chat", use_container_width=True, type="primary"):
-            self.start_new_chat_session()
+        # FIXED: Use unique form for New Chat button to prevent Enter key conflicts
+        with st.sidebar.form(key="new_chat_form", clear_on_submit=False):
+            new_chat_clicked = st.form_submit_button(
+                "🆕 New Chat", 
+                use_container_width=True, 
+                type="primary"
+            )
+            
+            if new_chat_clicked:
+                try:
+                    self.start_new_chat_session_fixed()
+                    st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"Error starting new chat: {str(e)}")
+                    logger.error(f"New chat error: {e}")
         
-        # Get recent sessions
+        # Get recent sessions with proper error handling
         try:
+            if not st.session_state.get('chat_history_manager'):
+                st.sidebar.warning("Chat history not initialized")
+                return
+                
             recent_sessions = st.session_state.chat_history_manager.get_user_sessions(user_id, limit=5)
             
             if recent_sessions:
                 st.sidebar.markdown("**Recent Sessions:**")
                 
+                # FIXED: Process sessions with better error handling
                 for i, session in enumerate(recent_sessions):
-                    # Create a shortened title for display
-                    display_title = session.title
-                    if len(display_title) > 25:
-                        display_title = display_title[:22] + "..."
-                    
-                    # Show message count and date
-                    msg_count = session.get_message_count()
-                    date_str = session.updated_at.strftime("%m/%d")
-                    
-                    # Check if this is the current session
-                    is_current = (st.session_state.current_session and 
-                                st.session_state.current_session.session_id == session.session_id)
-                    
-                    # Container for each session
-                    with st.sidebar.container():
-                        col1, col2 = st.columns([4, 1])
+                    try:
+                        # Safely create display title
+                        display_title = getattr(session, 'title', f'Session {i+1}')
+                        if len(display_title) > 25:
+                            display_title = display_title[:22] + "..."
                         
-                        with col1:
-                            button_type = "primary" if is_current else "secondary"
-                            if st.button(
-                                f"💬 {display_title}",
-                                key=f"session_{session.session_id}",
-                                use_container_width=True,
-                                type=button_type,
-                                help=f"{msg_count} messages, last: {date_str}"
-                            ):
-                                self.load_chat_session(session.session_id)
+                        # Safely get message count
+                        try:
+                            msg_count = session.get_message_count()
+                        except:
+                            msg_count = len(getattr(session, 'messages', []))
                         
-                        with col2:
-                            if st.button("🗑️", 
-                                       key=f"delete_{session.session_id}", 
-                                       help="Delete session",
-                                       type="secondary"):
-                                if st.session_state.chat_history_manager.delete_session(session.session_id, user_id):
-                                    # If we deleted the current session, start a new one
-                                    if is_current:
-                                        st.session_state.current_session = None
-                                        self.start_new_chat_session()
-                                    else:
+                        # Safely format date
+                        try:
+                            date_str = session.updated_at.strftime("%m/%d")
+                        except:
+                            date_str = "N/A"
+                        
+                        # Check if this is the current session (with safety)
+                        is_current = False
+                        try:
+                            current_session = st.session_state.get('current_session')
+                            if current_session and hasattr(current_session, 'session_id'):
+                                is_current = current_session.session_id == session.session_id
+                        except:
+                            is_current = False
+                        
+                        # FIXED: Use container with unique keys to prevent conflicts
+                        session_container = st.sidebar.container()
+                        with session_container:
+                            col1, col2 = st.columns([4, 1])
+                            
+                            with col1:
+                                # FIXED: Unique button keys to prevent conflicts
+                                button_key = f"session_btn_{session.session_id}_{i}"
+                                button_type = "primary" if is_current else "secondary"
+                                
+                                if st.button(
+                                    f"💬 {display_title}",
+                                    key=button_key,
+                                    use_container_width=True,
+                                    type=button_type,
+                                    help=f"{msg_count} messages, last: {date_str}"
+                                ):
+                                    try:
+                                        self.load_chat_session(session.session_id)
                                         st.rerun()
-                        
-                        # Show small session info
-                        st.sidebar.caption(f"📝 {msg_count} msgs • 📅 {date_str}")
-                        
-                        if i < len(recent_sessions) - 1:
-                            st.sidebar.markdown("---")
+                                    except Exception as e:
+                                        st.sidebar.error(f"Error loading session: {str(e)}")
+                                        logger.error(f"Load session error: {e}")
+                            
+                            with col2:
+                                # FIXED: Unique delete button with confirmation
+                                delete_key = f"delete_btn_{session.session_id}_{i}"
+                                if st.button("🗑️", 
+                                           key=delete_key, 
+                                           help="Delete session",
+                                           type="secondary"):
+                                    try:
+                                        # FIXED: Proper error handling for session deletion
+                                        success = st.session_state.chat_history_manager.delete_session(
+                                            session.session_id, user_id
+                                        )
+                                        
+                                        if success:
+                                            # If we deleted the current session, start a new one
+                                            if is_current:
+                                                st.session_state.current_session = None
+                                                try:
+                                                    self.start_new_chat_session_fixed()
+                                                except Exception as e:
+                                                    logger.error(f"Error starting new session after delete: {e}")
+                                            
+                                            st.sidebar.success("Session deleted!")
+                                            st.rerun()
+                                        else:
+                                            st.sidebar.error("Failed to delete session")
+                                            
+                                    except Exception as e:
+                                        st.sidebar.error(f"Delete error: {str(e)}")
+                                        logger.error(f"Delete session error: {e}")
+                            
+                            # Show session info safely
+                            try:
+                                st.sidebar.caption(f"📝 {msg_count} msgs • 📅 {date_str}")
+                            except:
+                                st.sidebar.caption("📝 Session info unavailable")
+                            
+                            if i < len(recent_sessions) - 1:
+                                st.sidebar.markdown("---")
+                                
+                    except Exception as e:
+                        # If individual session fails, continue with others
+                        st.sidebar.error(f"Error displaying session {i+1}")
+                        logger.error(f"Session display error: {e}")
+                        continue
             else:
                 st.sidebar.info("💭 No chat history yet.\nClick 'New Chat' to start!")
-                
+        
         except Exception as e:
             st.sidebar.error(f"Error loading chat history: {str(e)}")
+            logger.error(f"Chat history loading error: {e}")
     
-    def start_new_chat_session(self):
-        """Start a new chat session"""
+    def start_new_chat_session_fixed(self):
+        """Start a new chat session - FIXED VERSION"""
         user_id = st.session_state.user_info.get('id')
         if not user_id:
-            return
+            st.error("User ID not found")
+            return False
         
-        # Create new session
-        context = None
-        if st.session_state.documents_processed and st.session_state.file_stats:
-            files = st.session_state.file_stats.get('processed_files', [])
-            if files:
-                context = f"Documents: {', '.join(files[:3])}"
-                if len(files) > 3:
-                    context += f" and {len(files) - 3} more"
-        
-        session = st.session_state.chat_history_manager.create_session(
-            user_id=user_id,
-            title=f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            document_context=context
-        )
-        
-        st.session_state.current_session = session
-        st.session_state.chat_history = []  # Clear current chat display
-        
-        # Clean up old sessions (keep only 5 most recent)
-        st.session_state.chat_history_manager.cleanup_old_sessions(user_id, keep_count=5)
-        
-        st.rerun()
+        try:
+            # Ensure chat history manager exists
+            if not st.session_state.get('chat_history_manager'):
+                st.session_state.chat_history_manager = get_chat_history_manager()
+            
+            # Create context safely
+            context = None
+            if st.session_state.get('documents_processed') and st.session_state.get('file_stats'):
+                try:
+                    files = st.session_state.file_stats.get('processed_files', [])
+                    if files:
+                        context = f"Documents: {', '.join(files[:3])}"
+                        if len(files) > 3:
+                            context += f" and {len(files) - 3} more"
+                except Exception as e:
+                    logger.warning(f"Error creating context: {e}")
+                    context = "Documents available"
+            
+            # Create new session
+            session = st.session_state.chat_history_manager.create_session(
+                user_id=user_id,
+                title=f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                document_context=context
+            )
+            
+            if session:
+                st.session_state.current_session = session
+                st.session_state.chat_history = []  # Clear current chat display
+                
+                # Clean up old sessions safely
+                try:
+                    st.session_state.chat_history_manager.cleanup_old_sessions(user_id, keep_count=5)
+                except Exception as e:
+                    logger.warning(f"Error cleaning up old sessions: {e}")
+                
+                return True
+            else:
+                st.error("Failed to create new chat session")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error starting new chat session: {str(e)}")
+            logger.error(f"Start new chat session error: {e}")
+            return False
+    
+    def start_new_chat_session(self):
+        """Legacy method - redirects to fixed version"""
+        return self.start_new_chat_session_fixed()
     
     def load_chat_session(self, session_id: str):
         """Load an existing chat session"""
@@ -645,34 +741,55 @@ class ZenithAuthenticatedApp:
             st.rerun()
     
     def add_message_to_current_session(self, role: str, content: str):
-        """Add a message to the current session"""
+        """Add a message to the current session - FIXED VERSION"""
         user_id = st.session_state.user_info.get('id')
         if not user_id:
+            logger.warning("No user ID found for message addition")
             return
         
-        # Ensure we have a current session
-        if not st.session_state.current_session:
-            self.start_new_chat_session()
-        
-        # Add message to session
-        if st.session_state.current_session:
-            success = st.session_state.chat_history_manager.add_message_to_session(
-                st.session_state.current_session.session_id,
-                user_id,
-                role,
-                content
-            )
+        try:
+            # Ensure we have a current session
+            if not st.session_state.get('current_session'):
+                success = self.start_new_chat_session_fixed()
+                if not success:
+                    logger.error("Failed to create new session for message")
+                    return
             
-            if success:
-                # Update local session object
-                st.session_state.current_session.add_message(role, content)
+            # Add message to session
+            if st.session_state.current_session:
+                success = st.session_state.chat_history_manager.add_message_to_session(
+                    st.session_state.current_session.session_id,
+                    user_id,
+                    role,
+                    content
+                )
                 
-                # Update chat display
-                st.session_state.chat_history.append({
-                    'role': role,
-                    'content': content,
-                    'timestamp': datetime.now()
-                })
+                if success:
+                    # Update local session object
+                    try:
+                        st.session_state.current_session.add_message(role, content)
+                    except Exception as e:
+                        logger.warning(f"Error updating local session object: {e}")
+                    
+                    # Update chat display
+                    st.session_state.chat_history.append({
+                        'role': role,
+                        'content': content,
+                        'timestamp': datetime.now()
+                    })
+                else:
+                    logger.error("Failed to add message to session")
+            else:
+                logger.error("No current session available for message addition")
+                
+        except Exception as e:
+            logger.error(f"Error adding message to session: {e}")
+            # Still add to local display even if session fails
+            st.session_state.chat_history.append({
+                'role': role,
+                'content': content,
+                'timestamp': datetime.now()
+            })
     
     def render_file_upload_interface(self):
         """Render file upload interface for chat users"""
@@ -853,22 +970,76 @@ class ZenithAuthenticatedApp:
         # Display chat history
         self.display_chat_history()
         
-        # Chat input
-        user_input = st.chat_input("Ask me anything...")
+        # FIXED: Isolated chat input form to prevent Enter key conflicts
+        st.markdown("---")
+        st.markdown("#### 💬 Send a Message")
         
-        if user_input:
-            self.handle_user_input(user_input, has_documents)
+        # Use a dedicated form that handles Enter key properly
+        with st.form(key="main_chat_form", clear_on_submit=True):
+            user_input = st.text_area(
+                "Your message:",
+                placeholder="Type your message here and press Ctrl+Enter or click Send...",
+                height=100,
+                key="main_chat_input",
+                help="Press Ctrl+Enter or click the Send button below"
+            )
+            
+            # The form submit button handles Enter key properly
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                submitted = st.form_submit_button(
+                    "📤 Send Message", 
+                    type="primary", 
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Add help text
+                st.caption("Press Ctrl+Enter")
+            
+            with col3:
+                # Empty column for spacing
+                pass
+            
+            if submitted and user_input.strip():
+                try:
+                    self.handle_user_input(user_input.strip(), has_documents)
+                except Exception as e:
+                    st.error(f"Error handling input: {str(e)}")
+                    logger.error(f"Input handling error: {e}")
         
-        # Chat controls
-        col1, col2 = st.columns([1, 1])
+        # FIXED: Separate controls container with unique keys to prevent conflicts
+        st.markdown("---")
+        st.markdown("#### 🛠️ Chat Controls")
+        
+        # Use separate forms for each button to prevent interference
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🗑️ Clear Chat"):
-                self.clear_chat_history()
+            with st.form(key="clear_chat_form"):
+                if st.form_submit_button("🗑️ Clear Chat", use_container_width=True):
+                    try:
+                        self.clear_chat_history()
+                    except Exception as e:
+                        st.error(f"Error clearing chat: {str(e)}")
         
         with col2:
-            if has_documents and st.button("📊 Document Stats"):
-                self.show_document_stats()
+            if has_documents:
+                with st.form(key="doc_stats_form"):
+                    if st.form_submit_button("📊 Document Stats", use_container_width=True):
+                        try:
+                            self.show_document_stats()
+                        except Exception as e:
+                            st.error(f"Error showing stats: {str(e)}")
+        
+        with col3:
+            with st.form(key="new_chat_form_main"):
+                if st.form_submit_button("🔄 New Chat", use_container_width=True):
+                    try:
+                        self.start_new_chat_session_fixed()
+                    except Exception as e:
+                        st.error(f"Error starting new chat: {str(e)}")
     
     def display_chat_history(self):
         """Display the chat history"""
@@ -946,21 +1117,31 @@ class ZenithAuthenticatedApp:
         st.rerun()
     
     def clear_chat_history(self):
-        """Clear current chat history and start new session"""
-        st.session_state.chat_history = []
-        st.session_state.current_session = None
-        if st.session_state.chat_engine:
-            st.session_state.chat_engine.clear_conversation_history()
-        self.start_new_chat_session()
-        st.rerun()
+        """Clear current chat history and start new session - FIXED VERSION"""
+        try:
+            st.session_state.chat_history = []
+            st.session_state.current_session = None
+            if st.session_state.get('chat_engine'):
+                st.session_state.chat_engine.clear_conversation_history()
+            self.start_new_chat_session_fixed()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error clearing chat history: {str(e)}")
+            logger.error(f"Clear chat history error: {e}")
     
     def show_document_stats(self):
-        """Show document statistics"""
-        if st.session_state.chat_engine:
-            stats = st.session_state.chat_engine.get_user_document_stats()
-            
-            st.sidebar.markdown("### 📊 Document Statistics")
-            st.sidebar.json(stats)
+        """Show document statistics - FIXED VERSION"""
+        try:
+            if st.session_state.get('chat_engine'):
+                stats = st.session_state.chat_engine.get_user_document_stats()
+                
+                st.sidebar.markdown("### 📊 Document Statistics")
+                st.sidebar.json(stats)
+            else:
+                st.sidebar.warning("Chat engine not initialized")
+        except Exception as e:
+            st.sidebar.error(f"Error showing document stats: {str(e)}")
+            logger.error(f"Document stats error: {e}")
     
     def run(self):
         """Run the main application"""
