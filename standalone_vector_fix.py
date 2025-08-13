@@ -72,7 +72,7 @@ st.markdown("---")
 if st.button("🔌 Test Qdrant Connection", type="secondary"):
     try:
         with st.spinner("Testing connection..."):
-            response = requests.get(f"{qdrant_url}/health", headers=headers, timeout=10)
+            response = requests.get(f"{qdrant_url}/healthz", headers=headers, timeout=10)
         
         if response.status_code == 200:
             st.success("✅ Connected to Qdrant successfully!")
