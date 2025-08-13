@@ -15,7 +15,9 @@ with col2:
                             
                     except Exception as e:
                         st.error(f"❌ Force reinitialization failed: {e}")
-                        logger.error(f"Force reinitialization error: {e}")"""
+                        logger.error(f"Force reinitialization error: {e}")
+
+"""
 Enhanced Streamlit Web Interface for Zenith PDF Chatbot
 Includes authentication, role-based access, and improved features
 """
