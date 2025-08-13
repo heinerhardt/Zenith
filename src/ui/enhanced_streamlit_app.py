@@ -1061,7 +1061,7 @@ class ZenithAuthenticatedApp:
                                 st.markdown("---")
     
     def handle_user_input(self, user_input: str, has_documents: bool):
-        """Handle user input and generate response"""
+        """Handle user input and generate response - FIXED VERSION"""
         # Add user message to chat history and session
         self.add_message_to_current_session("user", user_input)
         
@@ -1078,10 +1078,20 @@ class ZenithAuthenticatedApp:
                     )
                 
                 # Get response from chat engine
+                logger.info(f"Sending chat request - use_rag: {has_documents}")
                 response = st.session_state.chat_engine.chat(
                     user_input, 
                     use_rag=has_documents
                 )
+                
+                # Debug: Log response structure
+                logger.info(f"Chat response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
+                if response.get("source_documents"):
+                    logger.info(f"Source documents count: {len(response['source_documents'])}")
+                    if response["source_documents"]:
+                        first_doc = response["source_documents"][0]
+                        logger.info(f"First document type: {type(first_doc)}")
+                        logger.info(f"First document keys/attrs: {list(first_doc.keys()) if isinstance(first_doc, dict) else dir(first_doc)}")
                 
                 # Add assistant response to chat history and session
                 assistant_message = {
@@ -1090,14 +1100,11 @@ class ZenithAuthenticatedApp:
                     "sources": []
                 }
                 
-                # Process source documents
+                # Process source documents safely
                 if response.get("source_documents"):
-                    for doc in response["source_documents"]:
-                        source_info = {
-                            "content": doc.page_content[:200] + "...",
-                            "filename": doc.metadata.get("filename", "Unknown file"),
-                            "page": doc.metadata.get("page", "Unknown page")
-                        }
+                    logger.info(f"Processing {len(response['source_documents'])} source documents")
+                    for i, doc in enumerate(response["source_documents"]):
+                        source_info = self.safe_process_source_document(doc, i)
                         assistant_message["sources"].append(source_info)
                 
                 # Add to session and display
@@ -1116,7 +1123,65 @@ class ZenithAuthenticatedApp:
         # Force refresh to show new messages
         st.rerun()
     
-    def clear_chat_history(self):
+    def safe_process_source_document(self, doc, index=0):
+        """Safely process source documents regardless of their format"""
+        try:
+            # Handle LangChain Document objects
+            if hasattr(doc, 'page_content') and hasattr(doc, 'metadata'):
+                content = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
+                metadata = doc.metadata or {}
+                filename = metadata.get("filename") or metadata.get("source") or f"Document {index + 1}"
+                page = metadata.get("page") or metadata.get("page_number") or "Unknown page"
+                
+            # Handle dictionary format
+            elif isinstance(doc, dict):
+                # Try different possible content keys
+                content_text = (doc.get("content") or 
+                              doc.get("page_content") or 
+                              doc.get("text") or 
+                              doc.get("document") or 
+                              str(doc))
+                content = content_text[:200] + "..." if len(str(content_text)) > 200 else str(content_text)
+                
+                # Try different possible filename keys
+                filename = (doc.get("filename") or 
+                           doc.get("source") or 
+                           doc.get("file") or 
+                           doc.get("name") or 
+                           f"Document {index + 1}")
+                
+                # Try different possible page keys
+                page = (doc.get("page") or 
+                       doc.get("page_number") or 
+                       doc.get("page_num") or 
+                       "Unknown page")
+                
+            # Handle string format
+            elif isinstance(doc, str):
+                content = doc[:200] + "..." if len(doc) > 200 else doc
+                filename = f"Text Document {index + 1}"
+                page = "Unknown page"
+                
+            # Handle unknown types
+            else:
+                logger.warning(f"Unknown document type: {type(doc)}")
+                content = str(doc)[:200] + "..."
+                filename = f"Document {index + 1}"
+                page = "Unknown page"
+            
+            return {
+                "content": content,
+                "filename": filename,
+                "page": str(page)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing source document {index}: {e}")
+            return {
+                "content": f"Error loading document content: {str(e)}",
+                "filename": f"Document {index + 1}",
+                "page": "Error"
+            }
         """Clear current chat history and start new session - FIXED VERSION"""
         try:
             st.session_state.chat_history = []
