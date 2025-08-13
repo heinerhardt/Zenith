@@ -1,4 +1,4 @@
-        with col2:
+with col2:
             # Fixed Force Reinitialize button - simplified version to prevent infinite loops
             if st.button("🔄 Force Reinitialize", help="Force reinitialize all providers", use_container_width=True):
                 
