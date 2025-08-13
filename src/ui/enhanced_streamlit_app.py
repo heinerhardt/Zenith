@@ -2159,6 +2159,64 @@ class ZenithAuthenticatedApp:
                 
             except Exception as e:
                 st.error(f"Error getting statistics: {e}")
+        
+        # Vector Dimension Check Section
+        st.markdown("---")
+        st.markdown("### 🔧 Vector Database Health")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔍 Check Vector Dimensions", type="secondary"):
+                try:
+                    from ..core.enhanced_vector_store import EnhancedVectorStore
+                    
+                    vector_store = EnhancedVectorStore()
+                    compatible, message, collection_dim, provider_dim = vector_store.check_dimension_compatibility()
+                    
+                    if compatible:
+                        st.success(f"✅ {message}")
+                    else:
+                        st.error(f"❌ {message}")
+                        st.write(f"Collection: {collection_dim} dimensions")
+                        st.write(f"Provider: {provider_dim} dimensions")
+                        
+                        st.session_state.dimension_mismatch = True
+                        
+                except Exception as e:
+                    st.error(f"Error checking dimensions: {e}")
+        
+        with col2:
+            if st.session_state.get('dimension_mismatch', False):
+                if st.button("🔄 Fix Dimension Mismatch", type="primary"):
+                    try:
+                        from ..core.enhanced_vector_store import EnhancedVectorStore
+                        
+                        with st.spinner("Recreating collection with correct dimensions..."):
+                            vector_store = EnhancedVectorStore()
+                            success, fix_message = vector_store.fix_dimension_mismatch()
+                        
+                        if success:
+                            st.success(f"✅ {fix_message}")
+                            st.balloons()
+                            st.session_state.dimension_mismatch = False
+                            
+                            st.info("ℹ️ Please restart the app and re-upload your documents.")
+                        else:
+                            st.error(f"❌ {fix_message}")
+                            
+                    except Exception as e:
+                        st.error(f"Error fixing dimensions: {e}")
+            
+            # Provider Status
+            try:
+                settings_manager = get_enhanced_settings_manager()
+                st.write("**Current Providers:**")
+                st.write(f"- Chat: {settings_manager.get_effective_chat_provider()}")
+                st.write(f"- Embedding: {settings_manager.get_effective_embedding_provider()}")
+                
+            except Exception as e:
+                st.error(f"Error getting provider status: {e}")
 
 
 def main():
