@@ -227,7 +227,7 @@ if st.button("🔧 Run HTTP-Only Diagnostic", type="primary"):
             
             # Test Qdrant health
             health_req = urllib.request.Request(
-                f"{qdrant_url}/health",
+                f"{qdrant_url}/healthz",
                 headers={"api-key": qdrant_api_key}
             )
             
