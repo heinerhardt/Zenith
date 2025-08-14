@@ -167,12 +167,12 @@ class EnhancedSettingsManager:
             settings.preferred_embedding_provider = config.embedding_provider
         
         # Langsmith configuration
-        settings.langsmith_enabled = config.langsmith_enabled
-        settings.langsmith_api_key = config.langsmith_api_key
-        settings.langsmith_project_name = config.langsmith_project_name
-        settings.langsmith_endpoint = config.langsmith_endpoint
-        settings.langsmith_tracing_enabled = config.langsmith_tracing_enabled
-        settings.langsmith_evaluation_enabled = config.langsmith_evaluation_enabled
+        settings.langfuse_enabled = config.langfuse_enabled
+        settings.langfuse_api_key = config.langfuse_api_key
+        settings.langfuse_project_name = config.langfuse_project_name
+        settings.langfuse_endpoint = config.langfuse_endpoint
+        settings.langfuse_tracing_enabled = config.langfuse_tracing_enabled
+        settings.langfuse_evaluation_enabled = config.langfuse_evaluation_enabled
         
         logger.info(f"Created default settings - Ollama enabled: {settings.ollama_enabled}, "
                    f"Chat provider: {settings.get_effective_chat_provider()}, "
@@ -188,8 +188,8 @@ class EnhancedSettingsManager:
         if not settings.openai_api_key and config.openai_api_key:
             settings.openai_api_key = config.openai_api_key
         
-        if not settings.langsmith_api_key and config.langsmith_api_key:
-            settings.langsmith_api_key = config.langsmith_api_key
+        if not settings.langfuse_api_key and config.langfuse_api_key:
+            settings.langfuse_api_key = config.langfuse_api_key
         
         # CRITICAL: Apply Ollama enabled override from .env
         # This ensures .env OLLAMA_ENABLED=True is respected
@@ -206,8 +206,8 @@ class EnhancedSettingsManager:
             logger.info("Forced provider selection to Ollama due to enablement")
         
         # Apply Langsmith enabled override from .env if admin hasn't explicitly enabled it
-        if config.langsmith_enabled and not settings.langsmith_enabled:
-            settings.langsmith_enabled = True
+        if config.langfuse_enabled and not settings.langfuse_enabled:
+            settings.langfuse_enabled = True
             logger.info("Langsmith enabled via .env configuration")
         
         return settings
@@ -813,17 +813,17 @@ class EnhancedSettingsManager:
                 provider_results.append(f"OpenAI: {openai_result[1]}")
             
             # Initialize Langsmith if enabled
-            if settings.is_langsmith_enabled():
+            if settings.is_langfuse_enabled():
                 try:
-                    from .langsmith_integration import initialize_langsmith
-                    langsmith_success = initialize_langsmith(settings)
-                    if langsmith_success:
+                    from .langfuse_integration import initialize_langfuse
+                    langfuse_success = initialize_langfuse(settings)
+                    if langfuse_success:
                         provider_results.append("Langsmith: initialized successfully")
                         logger.info("Langsmith initialization successful")
                     else:
                         logger.warning("Langsmith initialization failed")
                 except ImportError:
-                    logger.warning("Langsmith integration not available - install langsmith package")
+                    logger.warning("Langsmith integration not available - install langfuse package")
                 except Exception as e:
                     logger.error(f"Langsmith initialization error: {e}")
             
@@ -833,7 +833,7 @@ class EnhancedSettingsManager:
                 'chat_provider': self.get_effective_chat_provider(settings),
                 'embedding_provider': self.get_effective_embedding_provider(settings),
                 'ollama_enabled': self.is_ollama_enabled_effective(settings),
-                'langsmith_enabled': settings.is_langsmith_enabled(),
+                'langfuse_enabled': settings.is_langfuse_enabled(),
                 'timestamp': datetime.now().isoformat()
             })
             
@@ -855,7 +855,7 @@ class EnhancedSettingsManager:
             'provider_health': {},
             'last_updated': self._current_settings.updated_at.isoformat() if self._current_settings.updated_at else None,
             'ollama_enabled': self.is_ollama_enabled_effective(),
-            'langsmith_enabled': self._current_settings.is_langsmith_enabled()
+            'langfuse_enabled': self._current_settings.is_langfuse_enabled()
         }
         
         # Check OpenAI health
@@ -961,6 +961,51 @@ def get_enhanced_settings_manager() -> EnhancedSettingsManager:
         _enhanced_settings_manager = EnhancedSettingsManager()
     return _enhanced_settings_manager
 
+
+
+    def is_langfuse_enabled(self) -> bool:
+        """Check if Langfuse is enabled"""
+        try:
+            settings = self.get_settings()
+            return getattr(settings, 'langfuse_enabled', False)
+        except Exception:
+            return False
+    
+    @property
+    def langfuse_host(self) -> Optional[str]:
+        """Get Langfuse host"""
+        try:
+            settings = self.get_settings()
+            return getattr(settings, 'langfuse_host', None)
+        except Exception:
+            return None
+    
+    @property
+    def langfuse_public_key(self) -> Optional[str]:
+        """Get Langfuse public key"""
+        try:
+            settings = self.get_settings()
+            return getattr(settings, 'langfuse_public_key', None)
+        except Exception:
+            return None
+    
+    @property
+    def langfuse_secret_key(self) -> Optional[str]:
+        """Get Langfuse secret key"""
+        try:
+            settings = self.get_settings()
+            return getattr(settings, 'langfuse_secret_key', None)
+        except Exception:
+            return None
+    
+    @property
+    def langfuse_project_name(self) -> Optional[str]:
+        """Get Langfuse project name"""
+        try:
+            settings = self.get_settings()
+            return getattr(settings, 'langfuse_project_name', None)
+        except Exception:
+            return None
 
 # Backward compatibility
 def get_settings_manager():

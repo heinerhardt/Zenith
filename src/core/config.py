@@ -34,13 +34,14 @@ class Settings(BaseSettings):
     chat_provider: str = Field(default="openai", env="CHAT_PROVIDER")  # openai or ollama
     embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")  # openai or ollama
     
-    # Langsmith Configuration
-    langsmith_enabled: bool = Field(default=False, env="LANGSMITH_ENABLED")
-    langsmith_api_key: Optional[str] = Field(default=None, env="LANGSMITH_API_KEY")
-    langsmith_project_name: str = Field(default="zenith-pdf-chatbot", env="LANGSMITH_PROJECT_NAME")
-    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", env="LANGSMITH_ENDPOINT")
-    langsmith_tracing_enabled: bool = Field(default=True, env="LANGSMITH_TRACING_ENABLED")
-    langsmith_evaluation_enabled: bool = Field(default=False, env="LANGSMITH_EVALUATION_ENABLED")
+    # Langfuse Configuration (Self-hosted observability)
+    langfuse_enabled: bool = Field(default=False, env="LANGFUSE_ENABLED")
+    langfuse_host: str = Field(default="http://localhost:3000", env="LANGFUSE_HOST")
+    langfuse_public_key: Optional[str] = Field(default=None, env="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: Optional[str] = Field(default=None, env="LANGFUSE_SECRET_KEY")
+    langfuse_project_name: str = Field(default="zenith-pdf-chatbot", env="LANGFUSE_PROJECT_NAME")
+    langfuse_tracing_enabled: bool = Field(default=True, env="LANGFUSE_TRACING_ENABLED")
+    langfuse_evaluation_enabled: bool = Field(default=False, env="LANGFUSE_EVALUATION_ENABLED")
     
     # Qdrant Configuration
     qdrant_mode: str = Field(default="local", env="QDRANT_MODE")  # local or cloud

@@ -5,6 +5,8 @@ Enhanced Chat Engine for Zenith - Supports multiple AI providers and user contex
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 from datetime import datetime
+import time
+from ..core.langfuse_integration import trace_rag_flow_if_enabled, flush_langfuse
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -264,6 +266,8 @@ When no documents are available, you can still assist with general questions usi
         Returns:
             Dict with answer and source documents
         """
+        start_time = time.time()
+        
         try:
             # Create user message
             user_message = ChatMessage(
@@ -362,10 +366,49 @@ Please answer the user's question based on the provided context. If the context 
             if len(self.conversation_history) > 50:
                 self.conversation_history = self.conversation_history[-40:]
             
+            # Calculate total time and trace the complete RAG flow
+            total_time = time.time() - start_time
+            
+            # Prepare search results for tracing
+            search_results_for_trace = []
+            if use_rag and 'relevant_docs' in locals() and relevant_docs:
+                for doc in relevant_docs[:3]:  # First 3 for brevity
+                    search_results_for_trace.append({
+                        "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
+                        "filename": doc.metadata.get("filename", "Unknown"),
+                        "page": doc.metadata.get("page", "Unknown")
+                    })
+            
+            # Trace the complete RAG flow
+            trace_rag_flow_if_enabled(
+                user_input=message,
+                search_query=message,
+                search_results=search_results_for_trace,
+                llm_response=response_content,
+                provider=type(self.chat_provider).__name__,
+                model=getattr(self.chat_provider, 'model', 'unknown'),
+                total_time=total_time,
+                metadata={
+                    "use_rag": use_rag,
+                    "user_filter": user_filter,
+                    "user_id": self.user_id,
+                    "session_id": getattr(self, 'session_id', None),
+                    "source_documents_count": len(source_documents)
+                }
+            )
+            
+            # Flush traces to ensure they're sent
+            flush_langfuse()
+            
             return {
                 "answer": response_content,
                 "source_documents": source_documents,
-                "timestamp": assistant_message.timestamp.isoformat()
+                "timestamp": assistant_message.timestamp.isoformat(),
+                "metadata": {
+                    "total_time": total_time,
+                    "search_results": len(search_results_for_trace),
+                    "trace_logged": "langfuse"
+                }
             }
             
         except Exception as e:

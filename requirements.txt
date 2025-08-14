@@ -75,3 +75,4 @@ redis>=5.0.0
 # Additional data processing utilities
 #fnmatch2>=1.0.2
 fnmatch2==0.0.8
+langfuse>=2.0.0
