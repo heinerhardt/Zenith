@@ -1,15 +1,17 @@
-version: '3.8'
-
 services:
   langfuse-server:
-    image: langfuse/langfuse:2
+    image: langfuse/langfuse:latest
     depends_on:
       - db
+      - clickhouse
     ports:
       - "3000:3000"
     environment:
-      # Database connection
+      # Database connections
       DATABASE_URL: postgresql://langfuse:langfuse@db:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
       
       # Authentication (change these in production!)
       NEXTAUTH_SECRET: your-nextauth-secret-key-change-in-production
@@ -41,8 +43,22 @@ services:
     ports:
       - "5432:5432"  # Optional: expose for direct DB access
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"   # Native interface
+
 volumes:
   langfuse_postgres_data:
+  langfuse_clickhouse_data:
   langfuse_data:
 
 networks:
