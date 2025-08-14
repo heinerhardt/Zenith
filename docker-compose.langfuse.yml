@@ -11,6 +11,9 @@ services:
       # Database connection
       DATABASE_URL: postgresql://langfuse:langfuse@db:5432/langfuse
       
+      # Migration setting (required to avoid ClickHouse error)
+      CLICKHOUSE_MIGRATION_URL: ""
+      
       # Authentication (change these in production!)
       NEXTAUTH_SECRET: your-nextauth-secret-key-change-in-production
       SALT: your-salt-key-change-in-production
