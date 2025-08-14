@@ -563,18 +563,20 @@ class UserVectorStore:
             Total number of documents in the system
         """
         try:
-            # Count all documents without user filter
-            result = self.qdrant_manager.scroll_points(
-                collection_name=self.collection_name,
-                limit=1,
-                filter_conditions=None,
-                with_vectors=False,
-                with_payload=False
-            )
+            # Check if collection exists first
+            if not self.qdrant_manager.collection_exists(self.collection_name):
+                logger.warning(f"Collection {self.collection_name} does not exist")
+                return 0
             
             # Get collection info for total count
-            collection_info = self.qdrant_manager.client.get_collection(self.collection_name)
-            return collection_info.vectors_count
+            collection_info = self.qdrant_manager.get_collection_info(self.collection_name)
+            if collection_info:
+                points_count = collection_info.get('points_count', 0)
+                logger.debug(f"Total document count in {self.collection_name}: {points_count}")
+                return points_count
+            else:
+                logger.warning(f"Could not get collection info for {self.collection_name}")
+                return 0
             
         except Exception as e:
             logger.error(f"Error getting total document count: {e}")
