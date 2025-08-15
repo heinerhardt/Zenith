@@ -29,6 +29,7 @@ class LangfuseClient:
         
         # Initialize Langfuse client
         self.client = None
+        self._trace_method = None
         if self.public_key and self.secret_key and self.tracing_enabled:
             self._setup_langfuse()
     
@@ -44,11 +45,24 @@ class LangfuseClient:
                 secret_key=self.secret_key
             )
             
-            # Test the client by checking if it has the required methods
+            # Check if client has the required methods
             if not hasattr(self.client, 'trace'):
-                logger.error("Langfuse client missing 'trace' method. Please update langfuse package.")
-                self.client = None
-                return
+                logger.warning("Langfuse client missing 'trace' method. Trying compatibility mode...")
+                
+                # Try alternative methods for older versions
+                if hasattr(self.client, 'create_trace'):
+                    logger.info("Using 'create_trace' method for compatibility")
+                    # Create a wrapper
+                    self._trace_method = 'create_trace'
+                elif hasattr(self.client, 'log'):
+                    logger.info("Using 'log' method for compatibility")
+                    self._trace_method = 'log'
+                else:
+                    logger.error("No compatible tracing method found. Please update langfuse package: pip install --upgrade langfuse")
+                    self.client = None
+                    return
+            else:
+                self._trace_method = 'trace'
                 
             # Set environment variables for LangChain integration
             os.environ["LANGFUSE_HOST"] = self.host
@@ -68,6 +82,33 @@ class LangfuseClient:
         """Check if Langfuse is properly configured and enabled"""
         return bool(self.client and self.tracing_enabled)
     
+    def _create_trace_compatible(self, **kwargs):
+        """Create trace using compatible method based on Langfuse version"""
+        if not self.client:
+            return None
+            
+        try:
+            if self._trace_method == 'trace':
+                return self.client.trace(**kwargs)
+            elif self._trace_method == 'create_trace':
+                return self.client.create_trace(**kwargs)
+            elif self._trace_method == 'log':
+                # Fallback to basic logging for very old versions
+                trace_data = {
+                    'type': 'trace',
+                    'name': kwargs.get('name', 'unknown'),
+                    'input': kwargs.get('input'),
+                    'output': kwargs.get('output'),
+                    'metadata': kwargs.get('metadata', {})
+                }
+                return self.client.log(trace_data)
+            else:
+                logger.error("No trace method available")
+                return None
+        except Exception as e:
+            logger.error(f"Failed to create trace: {e}")
+            return None
+    
     def trace_chat_interaction(self, 
                               user_input: str, 
                               response: str, 
@@ -83,10 +124,12 @@ class LangfuseClient:
         
         try:
             # Create a new trace
-            trace = self.client.trace(
+            trace = self._create_trace_compatible(
                 name="chat_interaction",
                 user_id=metadata.get("user_id") if metadata else None,
                 session_id=metadata.get("session_id") if metadata else None,
+                input=user_input,
+                output=response,
                 metadata={
                     "provider": provider,
                     "model": model,
@@ -133,7 +176,7 @@ class LangfuseClient:
         
         try:
             # Create a new trace for document processing
-            trace = self.client.trace(
+            trace = self._create_trace_compatible(
                 name="document_processing",
                 user_id=metadata.get("user_id") if metadata else None,
                 metadata={
@@ -182,7 +225,7 @@ class LangfuseClient:
         
         try:
             # Create a new trace for search
-            trace = self.client.trace(
+            trace = self._create_trace_compatible(
                 name="search_query",
                 user_id=metadata.get("user_id") if metadata else None,
                 session_id=metadata.get("session_id") if metadata else None,
@@ -234,7 +277,7 @@ class LangfuseClient:
         
         try:
             # Create a new trace for the complete RAG flow
-            trace = self.client.trace(
+            trace = self._create_trace_compatible(
                 name="rag_flow",
                 user_id=metadata.get("user_id") if metadata else None,
                 session_id=metadata.get("session_id") if metadata else None,
