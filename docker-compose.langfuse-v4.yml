@@ -27,8 +27,10 @@ services:
       NEXTAUTH_URL: http://localhost:3000
 
       # Optional: Admin user (will be created on first startup)
-      LANGFUSE_INIT_USER_EMAIL: admin@zenith.local
-      LANGFUSE_INIT_USER_PASSWORD: changeme123
+      LANGFUSE_INIT_USER_EMAIL: "admin@zenith.local"
+      LANGFUSE_INIT_USER_PASSWORD: "changeme123"
+      LANGFUSE_INIT_ORG_ID: "zenith-org"
+      LANGFUSE_INIT_ORG_NAME: "Zenith Organization"
 
     restart: no
     volumes:
