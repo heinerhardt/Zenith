@@ -36,14 +36,29 @@ class LangfuseClient:
     def _setup_langfuse(self):
         """Setup Langfuse client and environment"""
         try:
-            from langfuse import Langfuse
-            
-            # Initialize Langfuse client
-            self.client = Langfuse(
-                host=self.host,
-                public_key=self.public_key,
-                secret_key=self.secret_key
-            )
+            # Try different import patterns for Langfuse
+            try:
+                from langfuse import Langfuse
+                # Initialize Langfuse client
+                self.client = Langfuse(
+                    host=self.host,
+                    public_key=self.public_key,
+                    secret_key=self.secret_key
+                )
+                logger.info("Initialized Langfuse with class import")
+            except Exception as e:
+                logger.warning(f"Failed to initialize with Langfuse class: {e}")
+                
+                # Try global instance pattern
+                try:
+                    from langfuse import langfuse
+                    # Configure global instance
+                    langfuse.auth_check()  # This configures the global instance
+                    self.client = langfuse
+                    logger.info("Using global Langfuse instance")
+                except Exception as e2:
+                    logger.error(f"Failed to use global Langfuse instance: {e2}")
+                    raise e
             
             # Debug: Show available methods
             available_methods = [method for method in dir(self.client) if not method.startswith('_')]

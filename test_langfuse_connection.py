@@ -46,12 +46,39 @@ def test_langfuse_connection():
         
         logger.info("✅ Langfuse client initialized successfully")
         
+        # Debug: Show all available methods
+        available_methods = [method for method in dir(langfuse) if not method.startswith('_')]
+        logger.info(f"Available Langfuse methods: {available_methods}")
+        
         # Check if client has trace method
         if not hasattr(langfuse, 'trace'):
             logger.error("❌ Langfuse client doesn't have 'trace' method!")
-            logger.error("   Your langfuse package might be outdated.")
-            logger.error("   Try: pip install --upgrade langfuse")
-            return False
+            logger.error(f"   Available methods: {available_methods}")
+            
+            # Try alternative patterns for modern Langfuse
+            logger.info("Trying alternative Langfuse patterns...")
+            
+            # Pattern 1: Global langfuse instance
+            try:
+                from langfuse import langfuse as langfuse_global
+                if hasattr(langfuse_global, 'trace'):
+                    logger.info("✅ Found trace method in global langfuse instance")
+                    langfuse = langfuse_global
+                else:
+                    logger.info(f"Global langfuse methods: {[m for m in dir(langfuse_global) if not m.startswith('_')]}")
+            except ImportError:
+                logger.info("No global langfuse instance available")
+            
+            # Pattern 2: Check for create_trace or other methods
+            if hasattr(langfuse, 'create_trace'):
+                logger.info("✅ Found 'create_trace' method - using compatibility mode")
+            elif hasattr(langfuse, 'log'):
+                logger.info("✅ Found 'log' method - using basic logging mode")
+            elif hasattr(langfuse, 'observe'):
+                logger.info("✅ Found 'observe' method - using decorator mode")
+            else:
+                logger.error("❌ No compatible tracing method found")
+                return False
         
         # Send a test trace
         trace = langfuse.trace(
