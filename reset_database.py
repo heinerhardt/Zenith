@@ -29,8 +29,12 @@ def reset_settings():
         # Delete settings collection if it exists
         if qdrant_manager.collection_exists(collection_name):
             logger.info(f"Deleting existing {collection_name} collection...")
-            qdrant_manager.qdrant_client.delete_collection(collection_name)
-            logger.info(f"Collection {collection_name} deleted successfully")
+            success = qdrant_manager.delete_collection(collection_name)
+            if success:
+                logger.info(f"Collection {collection_name} deleted successfully")
+            else:
+                logger.error(f"Failed to delete collection {collection_name}")
+                return False
         
         logger.info("Settings reset completed. Application will recreate defaults on next startup.")
         
