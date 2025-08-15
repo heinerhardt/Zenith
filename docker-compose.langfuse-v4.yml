@@ -15,11 +15,10 @@ services:
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: '4str0g1ld0'
       CLICKHOUSE_MIGRATION_URL: "clickhouse://default:4str0g1ld0@clickhouse:9000/default"
-      CLICKHOUSE_CLUSTER_ENABLED: false
 
       # Authentication (change these in production!)
-      NEXTAUTH_SECRET: your-nextauth-secret-key-change-in-production
-      SALT: your-salt-key-change-in-production
+      NEXTAUTH_SECRET: "mysecretkey12345678901234567890"
+      SALT: "mysaltkey12345678901234567890123"
 
       # Optional: Enable telemetry (set to false for privacy)
       TELEMETRY_ENABLED: false
