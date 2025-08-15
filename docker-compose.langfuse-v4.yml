@@ -1,0 +1,87 @@
+services:
+  langfuse-server:
+    image: langfuse/langfuse:latest
+    depends_on:
+      db:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    user: "1000:1000"
+    ports:
+      - "3000:3000"
+    environment:
+      # Database connections
+      DATABASE_URL: postgresql://langfuse:langfuse@db:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: '4str0g1ld0'
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://default:4str0g1ld0@clickhouse:9000/default"
+
+      # Authentication (change these in production!)
+      NEXTAUTH_SECRET: your-nextauth-secret-key-change-in-production
+      SALT: your-salt-key-change-in-production
+
+      # Optional: Enable telemetry (set to false for privacy)
+      TELEMETRY_ENABLED: "false"
+
+      # Optional: Configure CORS for your domain
+      NEXTAUTH_URL: http://localhost:3000
+
+      # Optional: Admin user (will be created on first startup)
+      LANGFUSE_INIT_USER_EMAIL: admin@zenith.local
+      LANGFUSE_INIT_USER_PASSWORD: changeme123
+
+    restart: no
+    volumes:
+      - /pgvector/langfuse_data:/app/uploads
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+    volumes:
+      - /pgvector/langfuse_data/db:/var/lib/postgresql/data
+    restart: unless-stopped
+      #user: "1000:1000"
+    ports:
+      - "5433:5432"  # Optional: expose for direct DB access
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    environment:
+      HOME: /var/lib/clickhouse/home
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: '4str0g1ld0'
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - /pgvector/langfuse_data/clickhouse:/var/lib/clickhouse
+    restart: unless-stopped
+    user: "1000:1000"
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"   # Native interface
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+
+volumes:
+  langfuse_postgres_data:
+  langfuse_data:
+  clickhouse_data:
+
+networks:
+  default:
+    name: langfuse_network

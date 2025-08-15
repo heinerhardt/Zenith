@@ -5,14 +5,15 @@ services:
     image: langfuse/langfuse:2
     depends_on:
       - db
+      - clickhouse
     ports:
       - "3000:3000"
     environment:
       # Database connection
       DATABASE_URL: postgresql://langfuse:langfuse@db:5432/langfuse
       
-      # Migration setting (required to avoid ClickHouse error)
-      CLICKHOUSE_MIGRATION_URL: ""
+      # Migration setting (ClickHouse connection)
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://default:@clickhouse:8123/default"
       
       # Authentication (change these in production!)
       NEXTAUTH_SECRET: your-nextauth-secret-key-change-in-production
@@ -43,6 +44,20 @@ services:
     restart: unless-stopped
     ports:
       - "5432:5432"  # Optional: expose for direct DB access
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    restart: unless-stopped
 
 volumes:
   langfuse_postgres_data:
