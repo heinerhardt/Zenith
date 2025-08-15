@@ -44,6 +44,12 @@ class LangfuseClient:
                 secret_key=self.secret_key
             )
             
+            # Test the client by checking if it has the required methods
+            if not hasattr(self.client, 'trace'):
+                logger.error("Langfuse client missing 'trace' method. Please update langfuse package.")
+                self.client = None
+                return
+                
             # Set environment variables for LangChain integration
             os.environ["LANGFUSE_HOST"] = self.host
             os.environ["LANGFUSE_PUBLIC_KEY"] = self.public_key

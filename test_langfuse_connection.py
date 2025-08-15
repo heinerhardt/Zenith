@@ -46,6 +46,13 @@ def test_langfuse_connection():
         
         logger.info("✅ Langfuse client initialized successfully")
         
+        # Check if client has trace method
+        if not hasattr(langfuse, 'trace'):
+            logger.error("❌ Langfuse client doesn't have 'trace' method!")
+            logger.error("   Your langfuse package might be outdated.")
+            logger.error("   Try: pip install --upgrade langfuse")
+            return False
+        
         # Send a test trace
         trace = langfuse.trace(
             name="zenith-connection-test",
