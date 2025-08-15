@@ -277,13 +277,14 @@ class SystemSettings:
     preferred_chat_provider: str = "openai"
     preferred_embedding_provider: str = "openai"
     
-    # Langsmith Configuration
-    langsmith_enabled: bool = False
-    langsmith_api_key: Optional[str] = None
-    langsmith_project_name: str = "zenith-pdf-chatbot"
-    langsmith_endpoint: str = "https://api.smith.langchain.com"
-    langsmith_tracing_enabled: bool = True
-    langsmith_evaluation_enabled: bool = False
+    # Langfuse Configuration
+    langfuse_enabled: bool = False
+    langfuse_public_key: Optional[str] = None
+    langfuse_secret_key: Optional[str] = None
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_project_name: str = "zenith-pdf-chatbot"
+    langfuse_tracing_enabled: bool = True
+    langfuse_evaluation_enabled: bool = False
     
     # Qdrant Configuration
     qdrant_mode: str = "cloud"  # local or cloud
@@ -330,9 +331,9 @@ class SystemSettings:
         """Check if Ollama is enabled in settings"""
         return self.ollama_enabled
     
-    def is_langsmith_enabled(self) -> bool:
-        """Check if Langsmith is enabled in settings"""
-        return self.langsmith_enabled
+    def is_langfuse_enabled(self) -> bool:
+        """Check if Langfuse is enabled in settings"""
+        return self.langfuse_enabled
     
     # System Configuration
     allow_user_registration: bool = True

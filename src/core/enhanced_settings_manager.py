@@ -166,11 +166,12 @@ class EnhancedSettingsManager:
             settings.preferred_chat_provider = config.chat_provider
             settings.preferred_embedding_provider = config.embedding_provider
         
-        # Langsmith configuration
+        # Langfuse configuration
         settings.langfuse_enabled = config.langfuse_enabled
-        settings.langfuse_api_key = config.langfuse_api_key
+        settings.langfuse_public_key = config.langfuse_public_key
+        settings.langfuse_secret_key = config.langfuse_secret_key
+        settings.langfuse_host = config.langfuse_host
         settings.langfuse_project_name = config.langfuse_project_name
-        settings.langfuse_endpoint = config.langfuse_endpoint
         settings.langfuse_tracing_enabled = config.langfuse_tracing_enabled
         settings.langfuse_evaluation_enabled = config.langfuse_evaluation_enabled
         
@@ -188,8 +189,11 @@ class EnhancedSettingsManager:
         if not settings.openai_api_key and config.openai_api_key:
             settings.openai_api_key = config.openai_api_key
         
-        if not settings.langfuse_api_key and config.langfuse_api_key:
-            settings.langfuse_api_key = config.langfuse_api_key
+        if not settings.langfuse_public_key and config.langfuse_public_key:
+            settings.langfuse_public_key = config.langfuse_public_key
+        
+        if not settings.langfuse_secret_key and config.langfuse_secret_key:
+            settings.langfuse_secret_key = config.langfuse_secret_key
         
         # CRITICAL: Apply Ollama enabled override from .env
         # This ensures .env OLLAMA_ENABLED=True is respected
