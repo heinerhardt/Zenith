@@ -360,7 +360,35 @@ class SystemSettings:
         if 'updated_at' in data and isinstance(data['updated_at'], str):
             data['updated_at'] = datetime.fromisoformat(data['updated_at'])
         
-        return cls(**data)
+        # Migration: Handle old langsmith fields and map to langfuse
+        migration_mapping = {
+            'langsmith_enabled': 'langfuse_enabled',
+            'langsmith_api_key': 'langfuse_public_key',  # Note: this might need manual intervention
+            'langsmith_project_name': 'langfuse_project_name',
+            'langsmith_endpoint': 'langfuse_host',
+            'langsmith_tracing_enabled': 'langfuse_tracing_enabled',
+            'langsmith_evaluation_enabled': 'langfuse_evaluation_enabled'
+        }
+        
+        # Apply migration mapping
+        migrated_data = {}
+        for key, value in data.items():
+            if key in migration_mapping:
+                new_key = migration_mapping[key]
+                migrated_data[new_key] = value
+                # Special handling for API key migration
+                if key == 'langsmith_api_key' and value:
+                    # Set both keys for now, user needs to update with proper Langfuse keys
+                    migrated_data['langfuse_public_key'] = None
+                    migrated_data['langfuse_secret_key'] = None
+            else:
+                migrated_data[key] = value
+        
+        # Remove any unknown fields that might cause initialization errors
+        valid_fields = set(cls.__dataclass_fields__.keys())
+        clean_data = {k: v for k, v in migrated_data.items() if k in valid_fields}
+        
+        return cls(**clean_data)
 
 
 # Validation schemas
