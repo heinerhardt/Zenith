@@ -115,6 +115,13 @@ def setup_environment():
         
         logger.info("Environment setup completed successfully")
         
+        # Show Langfuse configuration
+        logger.info(f"🔧 Langfuse Configuration:")
+        logger.info(f"   Enabled: {config.langfuse_enabled}")
+        logger.info(f"   Host: {config.langfuse_host}")
+        logger.info(f"   Public Key: {'Set' if config.langfuse_public_key else 'Not set'}")
+        logger.info(f"   Secret Key: {'Set' if config.langfuse_secret_key else 'Not set'}")
+        
         # Validate configuration
         errors = validate_config()
         if errors:
