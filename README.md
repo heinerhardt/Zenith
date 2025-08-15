@@ -1,106 +1,138 @@
-# 📚 Zenith PDF Chatbot
+# Zenith PDF Chatbot
 
-A modern, secure PDF document processing and chat application with AI-powered question answering, user authentication, and chat history management.
+A comprehensive AI-powered document chat system that enables intelligent conversations with your PDF documents using RAG (Retrieval Augmented Generation) technology.
 
-## ✨ Features
+## Features
 
-- **PDF Document Processing** - Upload and process multiple PDF files
-- **AI-Powered Chat** - Ask questions about your documents using OpenAI or Ollama
-- **User Authentication** - Secure login system with role-based access
-- **Chat History** - Persistent conversation history (last 5 sessions per user)
-- **Admin Panel** - Administrative controls and MinIO integration
-- **Vector Database** - Efficient document storage using Qdrant (local or cloud)
-- **Multi-Provider AI** - Support for OpenAI and Ollama models
+- 🤖 **AI-Powered Chat**: Intelligent conversations with your PDF documents
+- 📚 **PDF Processing**: Advanced document ingestion and chunking
+- 🔍 **Vector Search**: High-performance semantic search using Qdrant
+- 🌐 **Web Interface**: User-friendly Streamlit-based UI
+- 🔒 **Authentication**: Secure user management with JWT tokens
+- 📊 **Monitoring**: Built-in observability with Langfuse integration
+- 🐳 **Containerized**: Full Docker support for easy deployment
+- 🔧 **Configurable**: Flexible configuration management
+- 🚀 **Multiple Providers**: Support for Ollama and OpenAI models
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.9+
-- Git
-- OpenAI API key (or local Ollama installation)
-- Qdrant database (local or cloud)
+- **Python**: 3.9 or higher
+- **Memory**: Minimum 4GB RAM (8GB+ recommended)
+- **Storage**: 2GB free space
+- **OS**: Windows, macOS, or Linux
+
+### Required Services
+- **Qdrant**: Vector database (local or cloud)
+- **Ollama**: Local LLM provider (recommended)
+- **Docker**: For containerized deployment (optional)
 
 ### 1. Clone and Setup
 
 ```bash
 git clone <repository-url>
 cd Zenith
+
+# Create virtual environment
 python -m venv venv
 
-# Windows
+# Activate virtual environment
+# Windows:
 venv\Scripts\activate
-
-# Linux/Mac
+# macOS/Linux:
 source venv/bin/activate
 
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Environment Configuration
+### 2. Setup Services
 
-Copy and configure environment file:
+#### Option A: Docker (Recommended)
 
 ```bash
+# Start all services with Langfuse monitoring
+docker-compose -f docker-compose.langfuse-v4.yml up -d
+
+# Start basic services only
+docker-compose up -d
+```
+
+#### Option B: Manual Setup
+
+1. **Install Qdrant**:
+```bash
+# Using Docker
+docker run -p 6333:6333 qdrant/qdrant
+
+# Or download from https://qdrant.tech
+```
+
+2. **Install Ollama**:
+```bash
+# Download from https://ollama.ai
+# Pull required models
+ollama pull llama2  # or your preferred model
+ollama pull nomic-embed-text  # for embeddings
+```
+
+### 3. Configuration
+
+Create environment configuration:
+
+```bash
+# Copy example config
 cp .env.example .env
+
+# Edit configuration
+nano .env
 ```
 
-Edit `.env` with your settings:
-
+Key configuration variables:
 ```env
-# AI Configuration
-OPENAI_API_KEY=your-openai-api-key
-PREFERRED_CHAT_MODEL=gpt-4o-mini
-PREFERRED_EMBEDDING_MODEL=text-embedding-3-small
+# Qdrant Configuration
+QDRANT_URL=http://localhost
+QDRANT_PORT=6333
+QDRANT_COLLECTION_NAME=zenith_docs
 
-# Qdrant Configuration (Cloud)
-QDRANT_MODE=cloud
-QDRANT_CLOUD_URL=your-qdrant-url
-QDRANT_CLOUD_API_KEY=your-qdrant-api-key
+# Ollama Configuration
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=llama2
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
-# Or Qdrant Local (see Local Setup section)
-# QDRANT_MODE=local
-# QDRANT_URL=localhost
-# QDRANT_PORT=6333
-
-# Application Settings
-APP_PORT=8505
+# Application Configuration
+APP_PORT=8501
 DEBUG_MODE=false
-ENABLE_AUTH=true
-JWT_SECRET_KEY=your-secure-jwt-secret
+LOG_LEVEL=INFO
+
+# Langfuse Monitoring (Optional)
+LANGFUSE_PUBLIC_KEY=your-public-key
+LANGFUSE_SECRET_KEY=your-secret-key
+LANGFUSE_HOST=http://localhost:3000
 ```
 
-### 3. Initialize Database
+### 4. Initialize Environment
 
 ```bash
-python setup.py
+# Setup directories and validate configuration
+python main.py setup
+
+# Check system status
+python main.py info
 ```
 
-This creates:
-- Database collections and indexes
-- Default admin user (username: `admin`, password: `Admin123!`)
-- Initial configuration
-
-### 4. Run Application
+### 5. Run the Application
 
 ```bash
-python main.py ui --port 8505
+# Start web interface
+python main.py ui
+
+# Or start API server
+python main.py api
 ```
 
-Or use provided scripts:
-```bash
-# Windows
-run.bat
-
-# Linux/Mac
-./run.sh
-```
-
-### 5. Access Application
-
-- **URL**: http://127.0.0.1:8505
-- **Admin Login**: `admin` / `Admin123!`
-- **Register**: Create new user accounts via registration form
+Access the application at `http://localhost:8501`
 
 ## 🗄️ Local Qdrant Setup (Recommended)
 
