@@ -40,6 +40,7 @@ class LangfuseClient:
             try:
                 from langfuse import Langfuse
                 # Initialize Langfuse client
+                # The client should automatically use the correct ingestion endpoint
                 self.client = Langfuse(
                     host=self.host,
                     public_key=self.public_key,
@@ -81,9 +82,15 @@ class LangfuseClient:
                 return
                 
             # Set environment variables for LangChain integration
-            os.environ["LANGFUSE_HOST"] = self.host
+            # Ensure the host is clean and properly formatted
+            clean_host = self.host.rstrip('/')
+            os.environ["LANGFUSE_HOST"] = clean_host
             os.environ["LANGFUSE_PUBLIC_KEY"] = self.public_key
             os.environ["LANGFUSE_SECRET_KEY"] = self.secret_key
+            
+            logger.info(f"Langfuse environment configured:")
+            logger.info(f"  Host: {clean_host}")
+            logger.info(f"  Expected ingestion endpoint: {clean_host}/api/public/ingestion")
             
             logger.info(f"Langfuse tracing initialized for project: {self.project_name} at {self.host}")
             

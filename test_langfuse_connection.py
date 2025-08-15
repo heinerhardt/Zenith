@@ -37,6 +37,17 @@ def test_langfuse_connection():
     try:
         from langfuse import Langfuse
         
+        # Test ingestion endpoint first
+        import requests
+        ingestion_url = f"{config.langfuse_host.rstrip('/')}/api/public/ingestion"
+        logger.info(f"Testing ingestion endpoint: {ingestion_url}")
+        
+        try:
+            response = requests.get(ingestion_url, timeout=5)
+            logger.info(f"Ingestion endpoint response: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Could not reach ingestion endpoint: {e}")
+        
         # Initialize Langfuse client
         langfuse = Langfuse(
             host=config.langfuse_host,
