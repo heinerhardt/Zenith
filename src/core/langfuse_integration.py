@@ -65,19 +65,18 @@ class LangfuseClient:
             logger.info(f"Available Langfuse methods: {available_methods}")
             
             # Check for the correct trace method in modern Langfuse
-            if hasattr(self.client, 'trace'):
+            if hasattr(self.client, 'create_trace_id') and hasattr(self.client, 'start_span'):
+                self._trace_method = 'modern'
+                logger.info("Using modern Langfuse API with create_trace_id + start_span")
+            elif hasattr(self.client, 'create_event'):
+                self._trace_method = 'events'
+                logger.info("Using Langfuse events API")
+            elif hasattr(self.client, 'trace'):
                 self._trace_method = 'trace'
                 logger.info("Using 'trace' method")
-            elif hasattr(self.client, 'create_trace'):
-                self._trace_method = 'create_trace'
-                logger.info("Using 'create_trace' method for compatibility")
-            elif hasattr(self.client, 'log'):
-                self._trace_method = 'log'
-                logger.info("Using 'log' method for compatibility")
             else:
                 logger.error("No compatible tracing method found.")
                 logger.error(f"Available methods: {available_methods}")
-                logger.error("Please check Langfuse documentation for the correct API.")
                 self.client = None
                 return
                 
@@ -105,23 +104,75 @@ class LangfuseClient:
             return None
             
         try:
-            if self._trace_method == 'trace':
-                return self.client.trace(**kwargs)
-            elif self._trace_method == 'create_trace':
-                return self.client.create_trace(**kwargs)
-            elif self._trace_method == 'log':
-                # Fallback to basic logging for very old versions
-                trace_data = {
-                    'type': 'trace',
+            if self._trace_method == 'modern':
+                # Modern Langfuse API pattern
+                trace_id = self.client.create_trace_id()
+                
+                # Create a mock trace object that has the methods we need
+                class ModernTrace:
+                    def __init__(self, client, trace_id):
+                        self.client = client
+                        self.id = trace_id
+                        
+                    def span(self, name, input=None, output=None, metadata=None):
+                        span_obj = self.client.start_span(
+                            name=name,
+                            input=input,
+                            output=output,
+                            metadata=metadata
+                        )
+                        # Add end method if it doesn't exist
+                        if not hasattr(span_obj, 'end'):
+                            span_obj.end = lambda: None
+                        return span_obj
+                        
+                    def generation(self, name, model=None, input=None, output=None, metadata=None):
+                        gen_obj = self.client.start_generation(
+                            name=name,
+                            model=model,
+                            input=input,
+                            output=output,
+                            metadata=metadata
+                        )
+                        # Add end method if it doesn't exist
+                        if not hasattr(gen_obj, 'end'):
+                            gen_obj.end = lambda: None
+                        return gen_obj
+                
+                return ModernTrace(self.client, trace_id)
+                
+            elif self._trace_method == 'events':
+                # Use events API
+                event_data = {
                     'name': kwargs.get('name', 'unknown'),
                     'input': kwargs.get('input'),
                     'output': kwargs.get('output'),
                     'metadata': kwargs.get('metadata', {})
                 }
-                return self.client.log(trace_data)
+                event = self.client.create_event(**event_data)
+                
+                # Create a mock trace object
+                class EventTrace:
+                    def __init__(self, event):
+                        self.id = getattr(event, 'id', 'unknown')
+                        
+                    def span(self, **kwargs):
+                        return self  # Return self for chaining
+                        
+                    def generation(self, **kwargs):
+                        return self  # Return self for chaining
+                        
+                    def end(self):
+                        pass  # No-op for event-based tracing
+                        
+                return EventTrace(event)
+                
+            elif self._trace_method == 'trace':
+                return self.client.trace(**kwargs)
             else:
                 logger.error("No trace method available")
                 return None
+                
         except Exception as e:
             logger.error(f"Failed to create trace: {e}")
             return None
