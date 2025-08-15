@@ -45,24 +45,26 @@ class LangfuseClient:
                 secret_key=self.secret_key
             )
             
-            # Check if client has the required methods
-            if not hasattr(self.client, 'trace'):
-                logger.warning("Langfuse client missing 'trace' method. Trying compatibility mode...")
-                
-                # Try alternative methods for older versions
-                if hasattr(self.client, 'create_trace'):
-                    logger.info("Using 'create_trace' method for compatibility")
-                    # Create a wrapper
-                    self._trace_method = 'create_trace'
-                elif hasattr(self.client, 'log'):
-                    logger.info("Using 'log' method for compatibility")
-                    self._trace_method = 'log'
-                else:
-                    logger.error("No compatible tracing method found. Please update langfuse package: pip install --upgrade langfuse")
-                    self.client = None
-                    return
-            else:
+            # Debug: Show available methods
+            available_methods = [method for method in dir(self.client) if not method.startswith('_')]
+            logger.info(f"Available Langfuse methods: {available_methods}")
+            
+            # Check for the correct trace method in modern Langfuse
+            if hasattr(self.client, 'trace'):
                 self._trace_method = 'trace'
+                logger.info("Using 'trace' method")
+            elif hasattr(self.client, 'create_trace'):
+                self._trace_method = 'create_trace'
+                logger.info("Using 'create_trace' method for compatibility")
+            elif hasattr(self.client, 'log'):
+                self._trace_method = 'log'
+                logger.info("Using 'log' method for compatibility")
+            else:
+                logger.error("No compatible tracing method found.")
+                logger.error(f"Available methods: {available_methods}")
+                logger.error("Please check Langfuse documentation for the correct API.")
+                self.client = None
+                return
                 
             # Set environment variables for LangChain integration
             os.environ["LANGFUSE_HOST"] = self.host
