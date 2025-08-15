@@ -92,6 +92,17 @@ class LangfuseClient:
             logger.info(f"  Host: {clean_host}")
             logger.info(f"  Expected ingestion endpoint: {clean_host}/api/public/ingestion")
             
+            # Check what the client is actually configured to use
+            if hasattr(self.client, '_client_wrapper') and hasattr(self.client._client_wrapper, 'base_url'):
+                actual_base_url = self.client._client_wrapper.base_url
+                logger.info(f"  Actual client base URL: {actual_base_url}")
+            elif hasattr(self.client, 'base_url'):
+                logger.info(f"  Actual client base URL: {self.client.base_url}")
+            elif hasattr(self.client, '_base_url'):
+                logger.info(f"  Actual client base URL: {self.client._base_url}")
+            else:
+                logger.info("  Could not determine client base URL")
+            
             logger.info(f"Langfuse tracing initialized for project: {self.project_name} at {self.host}")
             
         except ImportError:

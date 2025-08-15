@@ -35,6 +35,14 @@ def test_langfuse_connection():
         return False
     
     try:
+        # Enable HTTP debugging to see actual requests
+        import logging
+        import urllib3
+        
+        # Enable urllib3 debug logging to see HTTP requests
+        urllib3.disable_warnings()
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
+        
         from langfuse import Langfuse
         
         # Test ingestion endpoint first
@@ -56,6 +64,35 @@ def test_langfuse_connection():
         )
         
         logger.info("✅ Langfuse client initialized successfully")
+        
+        # Debug: Show client configuration
+        logger.info("🔍 Langfuse client configuration:")
+        
+        # Try to find the actual API endpoint the client is using
+        if hasattr(langfuse, '_client_wrapper'):
+            if hasattr(langfuse._client_wrapper, 'base_url'):
+                logger.info(f"  Client base URL: {langfuse._client_wrapper.base_url}")
+            if hasattr(langfuse._client_wrapper, '_base_url'):
+                logger.info(f"  Client _base_url: {langfuse._client_wrapper._base_url}")
+        
+        if hasattr(langfuse, 'base_url'):
+            logger.info(f"  Direct base_url: {langfuse.base_url}")
+        if hasattr(langfuse, '_base_url'):
+            logger.info(f"  Direct _base_url: {langfuse._base_url}")
+        if hasattr(langfuse, 'host'):
+            logger.info(f"  Host property: {langfuse.host}")
+            
+        # Show internal attributes that might contain URL info
+        url_attrs = [attr for attr in dir(langfuse) if 'url' in attr.lower() or 'host' in attr.lower()]
+        if url_attrs:
+            logger.info(f"  URL-related attributes: {url_attrs}")
+            for attr in url_attrs:
+                try:
+                    value = getattr(langfuse, attr)
+                    if not callable(value):
+                        logger.info(f"    {attr}: {value}")
+                except:
+                    pass
         
         # Debug: Show all available methods
         available_methods = [method for method in dir(langfuse) if not method.startswith('_')]
