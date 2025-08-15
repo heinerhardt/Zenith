@@ -132,7 +132,7 @@ python main.py ui
 python main.py api
 ```
 
-Access the application at `http://localhost:8501`
+Access the application at `http://localhost:8501` or `http://your-server-ip:8501`
 
 ## 🗄️ Local Qdrant Setup (Recommended)
 

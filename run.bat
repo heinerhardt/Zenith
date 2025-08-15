@@ -66,22 +66,22 @@ echo.
 set /p choice="Enter your choice (1-6): "
 
 if "%choice%"=="1" (
-    echo Starting Streamlit interface...
-    python main.py ui
+    echo Starting Streamlit interface on 0.0.0.0:8501...
+    python main.py ui --host 0.0.0.0 --port 8501
     goto menu
 )
 
 if "%choice%"=="2" (
-    echo Starting FastAPI server...
-    python main.py api
+    echo Starting FastAPI server on 0.0.0.0:8000...
+    python main.py api --host 0.0.0.0 --port 8000
     goto menu
 )
 
 if "%choice%"=="3" (
     echo Starting both API and UI...
-    start "Zenith API" python main.py api
+    start "Zenith API" python main.py api --host 0.0.0.0 --port 8000
     timeout /t 5 >nul
-    start "Zenith UI" python main.py ui
+    start "Zenith UI" python main.py ui --host 0.0.0.0 --port 8501
     goto menu
 )
 

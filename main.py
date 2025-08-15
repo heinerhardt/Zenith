@@ -22,7 +22,7 @@ setup_logging(config.log_level)
 logger = get_logger(__name__)
 
 
-def run_streamlit():
+def run_streamlit(host="0.0.0.0"):
     """Run the Streamlit web interface"""
     try:
         logger.info("Starting Zenith PDF Chatbot Streamlit interface...")
@@ -39,7 +39,7 @@ def run_streamlit():
             sys.executable, "-m", "streamlit", "run",
             "src/ui/enhanced_streamlit_app.py",
             "--server.port", str(config.app_port),
-            "--server.address", "127.0.0.1",
+            "--server.address", host,
             "--server.headless", "true" if not config.debug_mode else "false"
         ]
         
@@ -52,7 +52,7 @@ def run_streamlit():
         sys.exit(1)
 
 
-def run_api():
+def run_api(host="0.0.0.0", port=8000):
     """Run the FastAPI server"""
     try:
         logger.info("Starting Zenith PDF Chatbot API server...")
@@ -62,8 +62,8 @@ def run_api():
         
         uvicorn.run(
             app,
-            host="127.0.0.1",
-            port=8000,
+            host=host,
+            port=port,
             reload=config.debug_mode,
             log_level=config.log_level.lower(),
             access_log=True
@@ -278,15 +278,23 @@ Examples:
         config.log_level = args.log_level
         setup_logging(args.log_level)
     
-    if args.port:
+    # Set up host and port
+    host = args.host
+    port = args.port
+    
+    if port:
         if args.command == "ui":
-            config.app_port = args.port
+            config.app_port = port
+        elif args.command == "api":
+            api_port = port
+    else:
+        api_port = 8000  # Default API port
     
     # Run the specified command
     if args.command == "ui":
-        run_streamlit()
+        run_streamlit(host=host)
     elif args.command == "api":
-        run_api()
+        run_api(host=host, port=api_port)
     elif args.command == "test":
         run_tests()
     elif args.command == "setup":

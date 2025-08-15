@@ -65,18 +65,18 @@ while true; do
     
     case $choice in
         1)
-            echo "Starting Streamlit interface..."
-            python main.py ui
+            echo "Starting Streamlit interface on 0.0.0.0:8501..."
+            python main.py ui --host 0.0.0.0 --port 8501
             ;;
         2)
-            echo "Starting FastAPI server..."
-            python main.py api
+            echo "Starting FastAPI server on 0.0.0.0:8000..."
+            python main.py api --host 0.0.0.0 --port 8000
             ;;
         3)
             echo "Starting both API and UI..."
-            python main.py api &
+            python main.py api --host 0.0.0.0 --port 8000 &
             sleep 5
-            python main.py ui &
+            python main.py ui --host 0.0.0.0 --port 8501 &
             wait
             ;;
         4)
