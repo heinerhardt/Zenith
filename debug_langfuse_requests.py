@@ -48,9 +48,12 @@ def debug_langfuse_requests():
         
         logger.info("🔧 Creating Langfuse client...")
         
-        # Initialize client
+        # Initialize client with ingestion endpoint
+        ingestion_endpoint = f"{config.langfuse_host.rstrip('/')}/api/public/ingestion"
+        logger.info(f"Using ingestion endpoint: {ingestion_endpoint}")
+        
         langfuse = Langfuse(
-            host=config.langfuse_host,
+            host=ingestion_endpoint,
             public_key=config.langfuse_public_key,
             secret_key=config.langfuse_secret_key
         )

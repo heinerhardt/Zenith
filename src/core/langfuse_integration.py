@@ -40,16 +40,16 @@ class LangfuseClient:
             try:
                 from langfuse import Langfuse
                 # Initialize Langfuse client
-                # Configure for public API endpoints (/api/public/)
-                public_api_host = f"{self.host.rstrip('/')}/api/public"
+                # Configure for the single ingestion endpoint
+                ingestion_endpoint = f"{self.host.rstrip('/')}/api/public/ingestion"
                 
                 self.client = Langfuse(
-                    host=public_api_host,
+                    host=ingestion_endpoint,
                     public_key=self.public_key,
                     secret_key=self.secret_key
                 )
                 
-                logger.info(f"Configured Langfuse client for public API: {public_api_host}")
+                logger.info(f"Configured Langfuse client for ingestion endpoint: {ingestion_endpoint}")
                 logger.info("Initialized Langfuse with class import")
             except Exception as e:
                 logger.warning(f"Failed to initialize with Langfuse class: {e}")
@@ -93,8 +93,8 @@ class LangfuseClient:
             os.environ["LANGFUSE_SECRET_KEY"] = self.secret_key
             
             logger.info(f"Langfuse environment configured:")
-            logger.info(f"  Host: {clean_host}")
-            logger.info(f"  Expected ingestion endpoint: {clean_host}/api/public/ingestion")
+            logger.info(f"  Original Host: {clean_host}")
+            logger.info(f"  Using ingestion endpoint: {clean_host}/api/public/ingestion")
             
             # Check what the client is actually configured to use
             if hasattr(self.client, '_client_wrapper') and hasattr(self.client._client_wrapper, 'base_url'):

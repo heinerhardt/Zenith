@@ -42,8 +42,11 @@ def test_langfuse():
         from langfuse import Langfuse
         
         print("📡 Creating Langfuse client...")
+        ingestion_endpoint = f"{config.langfuse_host.rstrip('/')}/api/public/ingestion"
+        print(f"Using ingestion endpoint: {ingestion_endpoint}")
+        
         langfuse = Langfuse(
-            host=config.langfuse_host,
+            host=ingestion_endpoint,
             public_key=config.langfuse_public_key or "pk-test",
             secret_key=config.langfuse_secret_key or "sk-test"
         )
