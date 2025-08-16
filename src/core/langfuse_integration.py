@@ -40,12 +40,16 @@ class LangfuseClient:
             try:
                 from langfuse import Langfuse
                 # Initialize Langfuse client
-                # The client should automatically use the correct ingestion endpoint
+                # Configure for public API endpoints (/api/public/)
+                public_api_host = f"{self.host.rstrip('/')}/api/public"
+                
                 self.client = Langfuse(
-                    host=self.host,
+                    host=public_api_host,
                     public_key=self.public_key,
                     secret_key=self.secret_key
                 )
+                
+                logger.info(f"Configured Langfuse client for public API: {public_api_host}")
                 logger.info("Initialized Langfuse with class import")
             except Exception as e:
                 logger.warning(f"Failed to initialize with Langfuse class: {e}")

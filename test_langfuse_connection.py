@@ -56,9 +56,12 @@ def test_langfuse_connection():
         except Exception as e:
             logger.warning(f"Could not reach ingestion endpoint: {e}")
         
-        # Initialize Langfuse client
+        # Initialize Langfuse client with public API endpoint
+        public_api_host = f"{config.langfuse_host.rstrip('/')}/api/public"
+        logger.info(f"Using public API host: {public_api_host}")
+        
         langfuse = Langfuse(
-            host=config.langfuse_host,
+            host=public_api_host,
             public_key=config.langfuse_public_key,
             secret_key=config.langfuse_secret_key
         )
