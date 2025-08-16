@@ -45,14 +45,19 @@ def test_langfuse_connection():
         
         from langfuse import Langfuse
         
-        # Test ingestion endpoint first
+        # Test ingestion endpoint first (the single endpoint for all data)
         import requests
         ingestion_url = f"{config.langfuse_host.rstrip('/')}/api/public/ingestion"
-        logger.info(f"Testing ingestion endpoint: {ingestion_url}")
+        logger.info(f"Testing single ingestion endpoint: {ingestion_url}")
+        logger.info("Note: Langfuse uses this single endpoint for ALL data (traces, spans, generations)")
         
         try:
             response = requests.get(ingestion_url, timeout=5)
             logger.info(f"Ingestion endpoint response: {response.status_code}")
+            if response.status_code in [200, 405]:  # 405 = Method Not Allowed for GET, but endpoint exists
+                logger.info("✅ Ingestion endpoint is accessible")
+            else:
+                logger.warning(f"⚠️ Unexpected response code: {response.status_code}")
         except Exception as e:
             logger.warning(f"Could not reach ingestion endpoint: {e}")
         
