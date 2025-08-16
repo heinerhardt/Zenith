@@ -27,18 +27,29 @@ def debug_langfuse_requests():
     original_request = requests.request
     
     def logged_request(method, url, **kwargs):
-        print(f"🌐 HTTP {method.upper()} -> {url}")
+        print(f"\n🌐 HTTP {method.upper()} -> {url}")
         if 'headers' in kwargs:
             auth_header = kwargs['headers'].get('Authorization', 'None')
-            print(f"   Auth: {auth_header[:20]}..." if auth_header != 'None' else "   Auth: None")
+            content_type = kwargs['headers'].get('Content-Type', 'None')
+            print(f"   🔐 Auth: {auth_header[:20]}..." if auth_header != 'None' else "   🔐 Auth: None")
+            print(f"   📄 Content-Type: {content_type}")
+        if 'data' in kwargs or 'json' in kwargs:
+            data_preview = str(kwargs.get('data', kwargs.get('json', '')))[:100]
+            print(f"   📦 Data preview: {data_preview}...")
         try:
             response = original_request(method, url, **kwargs)
             print(f"   📊 Response: {response.status_code}")
             if response.status_code == 404:
-                print(f"   ❌ 404 NOT FOUND: {url}")
-                print(f"   📝 Response text: {response.text[:200]}...")
+                print(f"   ❌❌❌ 404 NOT FOUND: {url}")
+                print(f"   🔍 Full URL breakdown:")
+                print(f"       Protocol: {url.split('://')[0] if '://' in url else 'unknown'}")
+                print(f"       Host: {url.split('://')[1].split('/')[0] if '://' in url else 'unknown'}")
+                print(f"       Path: /{'/'.join(url.split('://')[1].split('/')[1:]) if '://' in url else url}")
+                print(f"   📝 Response text: {response.text[:500]}...")
             elif response.status_code >= 400:
                 print(f"   ❌ Error {response.status_code}: {response.text[:200]}...")
+            else:
+                print(f"   ✅ Success")
             return response
         except Exception as e:
             print(f"   💥 Request failed: {e}")
@@ -109,21 +120,39 @@ def debug_langfuse_requests():
         except Exception as e:
             print(f"❌ Failed to create event: {e}")
         
-        # Try a trace with generation (this often triggers the span export)
-        print("🚀 Attempting to create trace with generation...")
+        # Check available methods
+        print("🔍 Available Langfuse methods:")
+        methods = [m for m in dir(langfuse) if not m.startswith('_') and callable(getattr(langfuse, m))]
+        print(f"   {methods}")
+        
+        # Try modern API approach
+        print("🚀 Attempting modern trace creation...")
         
         try:
-            trace = langfuse.trace(name="debug-trace")
-            generation = trace.generation(
-                name="debug-generation",
-                model="debug-model",
-                input="test input",
-                output="test output"
-            )
-            generation.end()
-            print(f"✅ Created trace with generation: {trace.id}")
+            # Modern Langfuse API pattern
+            if hasattr(langfuse, 'create_trace'):
+                trace = langfuse.create_trace(name="debug-trace")
+                print(f"✅ Created trace with create_trace: {trace}")
+            elif hasattr(langfuse, 'trace'):
+                trace = langfuse.trace(name="debug-trace")
+                print(f"✅ Created trace with trace: {trace}")
+            else:
+                print("❓ No trace creation method found")
+                
+            # Try generation creation
+            if hasattr(langfuse, 'create_generation'):
+                generation = langfuse.create_generation(
+                    name="debug-generation",
+                    model="debug-model", 
+                    input={"text": "test input"},
+                    output={"text": "test output"}
+                )
+                print(f"✅ Created generation: {generation}")
+            else:
+                print("❓ No generation creation method found")
+                
         except Exception as e:
-            print(f"❌ Failed to create trace with generation: {e}")
+            print(f"❌ Failed to create trace/generation: {e}")
         
         # Try flush to send any pending data (this is where span export usually happens)
         print("🚀 Attempting to flush data (span export happens here)...")
