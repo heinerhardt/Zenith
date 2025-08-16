@@ -22,55 +22,82 @@ logger = get_logger(__name__)
 def debug_langfuse_requests():
     """Debug Langfuse requests with HTTP capture"""
     
-    # Enable HTTP debugging at all levels
-    import http.client as http_client
-    import urllib3
+    # Monkey patch requests to capture all HTTP calls
+    import requests
+    original_request = requests.request
     
-    # Enable low-level HTTP debugging
-    http_client.HTTPConnection.debuglevel = 1
+    def logged_request(method, url, **kwargs):
+        print(f"🌐 HTTP {method.upper()} -> {url}")
+        if 'headers' in kwargs:
+            auth_header = kwargs['headers'].get('Authorization', 'None')
+            print(f"   Auth: {auth_header[:20]}..." if auth_header != 'None' else "   Auth: None")
+        try:
+            response = original_request(method, url, **kwargs)
+            print(f"   📊 Response: {response.status_code}")
+            if response.status_code == 404:
+                print(f"   ❌ 404 NOT FOUND: {url}")
+                print(f"   📝 Response text: {response.text[:200]}...")
+            elif response.status_code >= 400:
+                print(f"   ❌ Error {response.status_code}: {response.text[:200]}...")
+            return response
+        except Exception as e:
+            print(f"   💥 Request failed: {e}")
+            raise
     
-    # Configure logging to capture HTTP traffic
-    logging.basicConfig()
-    logging.getLogger().setLevel(logging.DEBUG)
-    requests_log = logging.getLogger("requests.packages.urllib3")
-    requests_log.setLevel(logging.DEBUG)
-    requests_log.propagate = True
-    
-    urllib3_log = logging.getLogger("urllib3.connectionpool")
-    urllib3_log.setLevel(logging.DEBUG)
-    urllib3_log.propagate = True
+    requests.request = logged_request
     
     logger.info("🕷️ HTTP debugging enabled - will show all requests")
     logger.info(f"Langfuse Host: {config.langfuse_host}")
+    logger.info(f"Public Key: {config.langfuse_public_key[:20] if config.langfuse_public_key else 'None'}...")
+    logger.info(f"Secret Key: {config.langfuse_secret_key[:20] if config.langfuse_secret_key else 'None'}...")
     
     try:
         from langfuse import Langfuse
         
         logger.info("🔧 Creating Langfuse client...")
         
-        # Initialize client with ingestion endpoint
+        # Test both approaches
+        print("\n=== TESTING OLD APPROACH (BROKEN) ===")
         ingestion_endpoint = f"{config.langfuse_host.rstrip('/')}/api/public/ingestion"
-        logger.info(f"Using ingestion endpoint: {ingestion_endpoint}")
+        print(f"Old endpoint: {ingestion_endpoint}")
+        
+        try:
+            langfuse_old = Langfuse(
+                host=ingestion_endpoint,
+                public_key=config.langfuse_public_key,
+                secret_key=config.langfuse_secret_key
+            )
+            print("✅ Old client created")
+            
+            # Try a simple operation
+            trace_id = langfuse_old.create_trace_id()
+            print(f"✅ Old approach trace ID: {trace_id}")
+        except Exception as e:
+            print(f"❌ Old approach failed: {e}")
+        
+        print("\n=== TESTING NEW APPROACH (FIXED) ===")
+        clean_host = config.langfuse_host.rstrip('/')
+        print(f"New endpoint: {clean_host}")
         
         langfuse = Langfuse(
-            host=ingestion_endpoint,
+            host=clean_host,
             public_key=config.langfuse_public_key,
             secret_key=config.langfuse_secret_key
         )
         
-        logger.info("✅ Langfuse client created")
+        print("✅ New client created")
         
         # Try to get trace ID (this should trigger HTTP requests)
-        logger.info("🚀 Attempting to create trace ID...")
+        print("🚀 Attempting to create trace ID...")
         
         try:
             trace_id = langfuse.create_trace_id()
-            logger.info(f"✅ Created trace ID: {trace_id}")
+            print(f"✅ Created trace ID: {trace_id}")
         except Exception as e:
-            logger.error(f"❌ Failed to create trace ID: {e}")
+            print(f"❌ Failed to create trace ID: {e}")
         
         # Try to create a simple event (another HTTP request)
-        logger.info("🚀 Attempting to create event...")
+        print("🚀 Attempting to create event...")
         
         try:
             event = langfuse.create_event(
@@ -78,21 +105,47 @@ def debug_langfuse_requests():
                 input={"test": "data"},
                 metadata={"debug": True}
             )
-            logger.info(f"✅ Created event: {event}")
+            print(f"✅ Created event: {event}")
         except Exception as e:
-            logger.error(f"❌ Failed to create event: {e}")
+            print(f"❌ Failed to create event: {e}")
         
-        # Try flush to send any pending data
-        logger.info("🚀 Attempting to flush data...")
+        # Try a trace with generation (this often triggers the span export)
+        print("🚀 Attempting to create trace with generation...")
+        
+        try:
+            trace = langfuse.trace(name="debug-trace")
+            generation = trace.generation(
+                name="debug-generation",
+                model="debug-model",
+                input="test input",
+                output="test output"
+            )
+            generation.end()
+            print(f"✅ Created trace with generation: {trace.id}")
+        except Exception as e:
+            print(f"❌ Failed to create trace with generation: {e}")
+        
+        # Try flush to send any pending data (this is where span export usually happens)
+        print("🚀 Attempting to flush data (span export happens here)...")
         
         try:
             langfuse.flush()
-            logger.info("✅ Flush completed")
+            print("✅ Flush completed")
         except Exception as e:
-            logger.error(f"❌ Failed to flush: {e}")
+            print(f"❌ Failed to flush: {e}")
+        
+        # Check client configuration
+        print("\n=== CLIENT CONFIGURATION ===")
+        if hasattr(langfuse, '_client_wrapper'):
+            if hasattr(langfuse._client_wrapper, 'base_url'):
+                print(f"Client base URL: {langfuse._client_wrapper.base_url}")
+            if hasattr(langfuse._client_wrapper, '_base_url'):
+                print(f"Client _base_url: {langfuse._client_wrapper._base_url}")
+        if hasattr(langfuse, 'base_url'):
+            print(f"Langfuse base_url: {langfuse.base_url}")
             
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Langfuse: {e}")
+        print(f"❌ Failed to initialize Langfuse: {e}")
 
 if __name__ == "__main__":
     print("🕷️ Langfuse HTTP Request Debugger")
