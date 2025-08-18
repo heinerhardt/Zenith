@@ -36,52 +36,26 @@ class LangfuseClient:
     def _setup_langfuse(self):
         """Setup Langfuse client and environment"""
         try:
-            # Try different import patterns for Langfuse
-            try:
-                from langfuse import Langfuse
-                # Initialize Langfuse client
-                # Use base host - Langfuse will handle the ingestion endpoint internally
-                clean_host = self.host.rstrip('/')
-                
-                self.client = Langfuse(
-                    host=clean_host,
-                    public_key=self.public_key,
-                    secret_key=self.secret_key
-                )
-                
-                logger.info(f"Configured Langfuse client for host: {clean_host}")
-                logger.info("Initialized Langfuse with class import")
-            except Exception as e:
-                logger.warning(f"Failed to initialize with Langfuse class: {e}")
-                
-                # Try global instance pattern
-                try:
-                    from langfuse import langfuse
-                    # Configure global instance
-                    langfuse.auth_check()  # This configures the global instance
-                    self.client = langfuse
-                    logger.info("Using global Langfuse instance")
-                except Exception as e2:
-                    logger.error(f"Failed to use global Langfuse instance: {e2}")
-                    raise e
+            from langfuse import Langfuse
             
-            # Debug: Show available methods
-            available_methods = [method for method in dir(self.client) if not method.startswith('_')]
-            logger.info(f"Available Langfuse methods: {available_methods}")
+            # Use clean host URL - SDK handles the ingestion endpoint internally
+            clean_host = self.host.rstrip('/')
             
-            # Check for the correct trace method in modern Langfuse
-            if hasattr(self.client, 'create_trace_id') and hasattr(self.client, 'start_span'):
-                self._trace_method = 'modern'
-                logger.info("Using modern Langfuse API with create_trace_id + start_span")
-            elif hasattr(self.client, 'create_event'):
-                self._trace_method = 'events'
-                logger.info("Using Langfuse events API")
-            elif hasattr(self.client, 'trace'):
-                self._trace_method = 'trace'
-                logger.info("Using 'trace' method")
+            self.client = Langfuse(
+                host=clean_host,
+                public_key=self.public_key,
+                secret_key=self.secret_key
+            )
+            
+            logger.info(f"Configured Langfuse client for host: {clean_host}")
+            
+            # Test the SDK's high-level methods
+            if hasattr(self.client, 'trace'):
+                self._trace_method = 'sdk_trace'
+                logger.info("Using Langfuse SDK trace() method")
             else:
-                logger.error("No compatible tracing method found.")
-                logger.error(f"Available methods: {available_methods}")
+                logger.error("Langfuse SDK trace() method not available")
+                logger.error("Please upgrade: pip install --upgrade langfuse>=2.50.0")
                 self.client = None
                 return
                 
@@ -121,79 +95,15 @@ class LangfuseClient:
         return bool(self.client and self.tracing_enabled)
     
     def _create_trace_compatible(self, **kwargs):
-        """Create trace using compatible method based on Langfuse version"""
+        """Create trace using SDK's high-level trace() method"""
         if not self.client:
             return None
             
         try:
-            if self._trace_method == 'modern':
-                # Modern Langfuse API pattern
-                trace_id = self.client.create_trace_id()
-                
-                # Create a mock trace object that has the methods we need
-                class ModernTrace:
-                    def __init__(self, client, trace_id):
-                        self.client = client
-                        self.id = trace_id
-                        
-                    def span(self, name, input=None, output=None, metadata=None):
-                        span_obj = self.client.start_span(
-                            name=name,
-                            input=input,
-                            output=output,
-                            metadata=metadata
-                        )
-                        # Add end method if it doesn't exist
-                        if not hasattr(span_obj, 'end'):
-                            span_obj.end = lambda: None
-                        return span_obj
-                        
-                    def generation(self, name, model=None, input=None, output=None, metadata=None):
-                        gen_obj = self.client.start_generation(
-                            name=name,
-                            model=model,
-                            input=input,
-                            output=output,
-                            metadata=metadata
-                        )
-                        # Add end method if it doesn't exist
-                        if not hasattr(gen_obj, 'end'):
-                            gen_obj.end = lambda: None
-                        return gen_obj
-                
-                return ModernTrace(self.client, trace_id)
-                
-            elif self._trace_method == 'events':
-                # Use events API
-                event_data = {
-                    'name': kwargs.get('name', 'unknown'),
-                    'input': kwargs.get('input'),
-                    'output': kwargs.get('output'),
-                    'metadata': kwargs.get('metadata', {})
-                }
-                event = self.client.create_event(**event_data)
-                
-                # Create a mock trace object
-                class EventTrace:
-                    def __init__(self, event):
-                        self.id = getattr(event, 'id', 'unknown')
-                        
-                    def span(self, **kwargs):
-                        return self  # Return self for chaining
-                        
-                    def generation(self, **kwargs):
-                        return self  # Return self for chaining
-                        
-                    def end(self):
-                        pass  # No-op for event-based tracing
-                        
-                return EventTrace(event)
-                
-            elif self._trace_method == 'trace':
-                return self.client.trace(**kwargs)
-            else:
-                logger.error("No trace method available")
-                return None
+            # Use the SDK's high-level trace() method - it handles everything internally
+            trace = self.client.trace(**kwargs)
+            logger.debug(f"Created trace using SDK: {trace.id}")
+            return trace
                 
         except Exception as e:
             logger.error(f"Failed to create trace: {e}")
