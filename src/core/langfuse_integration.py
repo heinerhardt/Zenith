@@ -4,6 +4,7 @@ Langfuse integration for Zenith - Self-hosted observability and evaluation suppo
 
 import os
 import json
+import requests
 from typing import Dict, Any, Optional, List, Union
 from datetime import datetime, timezone
 import logging
@@ -30,6 +31,11 @@ class LangfuseClient:
         # Initialize Langfuse client
         self.client = None
         self._trace_method = None
+        
+        # Working HTTP solution for bypassing flush 404 issue
+        self.ingestion_url = f"{self.host.rstrip('/')}/api/public/ingestion"
+        self.auth = (self.public_key, self.secret_key) if self.public_key and self.secret_key else None
+        
         if self.public_key and self.secret_key and self.tracing_enabled:
             self._setup_langfuse()
     
@@ -222,76 +228,68 @@ class LangfuseClient:
                               model: str,
                               metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a chat interaction using Langfuse v3.x context API
+        Trace a chat interaction using working direct HTTP method
         Returns: trace_id for the traced interaction
         """
         if not self.is_enabled():
             return ""
         
         try:
-            if self._trace_method == 'sdk_v3_spans':
-                # Use v3.x context-based API with proper span context
-                trace_id = self.client.create_trace_id()
-                
-                # First create a span context, then add generation within it
-                with self.client.start_as_current_span(
-                    name="chat_interaction",
-                    input=user_input,
-                    output=response,
-                    metadata={
-                        "provider": provider,
-                        "project": self.project_name,
-                        **(metadata or {})
-                    }
-                ) as span:
-                    logger.debug(f"Started chat span in context: {span}")
-                    
-                    # Now update trace metadata within the span context
-                    self.client.update_current_trace(
-                        name="chat_interaction",
-                        user_id=metadata.get("user_id") if metadata else None,
-                        session_id=metadata.get("session_id") if metadata else None,
-                        metadata={
-                            "provider": provider,
-                            "model": model,
-                            "project": self.project_name,
-                            **(metadata or {})
-                        }
-                    )
-                    
-                    # Add generation within the span context
-                    with self.client.start_as_current_generation(
-                        name="llm_generation",
-                        model=model,
-                        input=user_input,
-                        output=response,
-                        metadata={
-                            "provider": provider,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            **(metadata or {})
-                        }
-                    ) as generation:
-                        # Generation automatically ends when context exits
-                        logger.debug(f"Started generation in context: {generation}")
-                
-                logger.debug(f"Traced chat interaction with trace_id: {trace_id}")
-                return str(trace_id)
-                
-            else:
-                # Fallback to event-based API
-                event = self.client.create_event(
-                    name="chat_interaction",
-                    input=user_input,
-                    output=response,
-                    metadata={
+            # Generate IDs
+            trace_id = str(uuid.uuid4()).replace('-', '')
+            generation_id = str(uuid.uuid4()).replace('-', '')
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create trace item
+            trace_item = {
+                "id": trace_id,
+                "type": "trace-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": trace_id,
+                    "name": "chat_interaction",
+                    "user_id": metadata.get("user_id") if metadata else None,
+                    "session_id": metadata.get("session_id") if metadata else None,
+                    "input": user_input,
+                    "output": response,
+                    "metadata": {
                         "provider": provider,
                         "model": model,
                         "project": self.project_name,
                         **(metadata or {})
                     }
-                )
-                logger.debug(f"Created chat event: {event}")
-                return str(getattr(event, 'id', 'event-based'))
+                }
+            }
+            
+            # Create generation item
+            generation_item = {
+                "id": generation_id,
+                "type": "generation-create", 
+                "timestamp": timestamp,
+                "body": {
+                    "id": generation_id,
+                    "trace_id": trace_id,
+                    "name": "llm_generation",
+                    "model": model,
+                    "input": user_input,
+                    "output": response,
+                    "metadata": {
+                        "provider": provider,
+                        "timestamp": timestamp,
+                        **(metadata or {})
+                    }
+                }
+            }
+            
+            # Send directly using working HTTP method
+            success = self._send_batch_direct([trace_item, generation_item])
+            
+            if success:
+                logger.debug(f"Successfully traced chat interaction: {trace_id}")
+                return trace_id
+            else:
+                logger.error("Failed to send chat interaction trace")
+                return ""
             
         except Exception as e:
             logger.error(f"Failed to trace chat interaction: {e}")
@@ -304,65 +302,72 @@ class LangfuseClient:
                                  success: bool,
                                  metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace document processing using Langfuse v3.x context API
+        Trace document processing using working direct HTTP method
         Returns: trace_id for the traced processing
         """
         if not self.is_enabled():
             return ""
         
         try:
-            if self._trace_method == 'sdk_v3_spans':
-                # Use v3.x context-based API with proper span context
-                trace_id = self.client.create_trace_id()
-                
-                # Create span context first
-                with self.client.start_as_current_span(
-                    name="pdf_processing",
-                    input={"filename": filename},
-                    output={
+            # Generate IDs
+            trace_id = str(uuid.uuid4()).replace('-', '')
+            span_id = str(uuid.uuid4()).replace('-', '')
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create trace item
+            trace_item = {
+                "id": trace_id,
+                "type": "trace-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": trace_id,
+                    "name": "document_processing",
+                    "user_id": metadata.get("user_id") if metadata else None,
+                    "input": {"filename": filename},
+                    "output": {
                         "chunk_count": chunk_count,
                         "processing_time_seconds": processing_time,
                         "success": success
                     },
-                    metadata={
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        **(metadata or {})
-                    }
-                ) as span:
-                    logger.debug(f"Started processing span in context: {span}")
-                    
-                    # Update trace metadata within the span context
-                    self.client.update_current_trace(
-                        name="document_processing",
-                        user_id=metadata.get("user_id") if metadata else None,
-                        metadata={
-                            "project": self.project_name,
-                            "document_filename": filename,
-                            **(metadata or {})
-                        }
-                    )
-                
-                logger.debug(f"Traced document processing with trace_id: {trace_id}")
-                return str(trace_id)
-                
-            else:
-                # Fallback to event-based API
-                event = self.client.create_event(
-                    name="document_processing",
-                    input={"filename": filename},
-                    output={
-                        "chunk_count": chunk_count,
-                        "processing_time_seconds": processing_time,
-                        "success": success
-                    },
-                    metadata={
+                    "metadata": {
                         "project": self.project_name,
                         "document_filename": filename,
                         **(metadata or {})
                     }
-                )
-                logger.debug(f"Created document processing event: {event}")
-                return str(getattr(event, 'id', 'event-based'))
+                }
+            }
+            
+            # Create span item
+            span_item = {
+                "id": span_id,
+                "type": "span-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": span_id,
+                    "trace_id": trace_id,
+                    "name": "pdf_processing",
+                    "input": {"filename": filename},
+                    "output": {
+                        "chunk_count": chunk_count,
+                        "processing_time_seconds": processing_time,
+                        "success": success
+                    },
+                    "metadata": {
+                        "timestamp": timestamp,
+                        **(metadata or {})
+                    }
+                }
+            }
+            
+            # Send directly using working HTTP method
+            success_sent = self._send_batch_direct([trace_item, span_item])
+            
+            if success_sent:
+                logger.debug(f"Successfully traced document processing: {trace_id}")
+                return trace_id
+            else:
+                logger.error("Failed to send document processing trace")
+                return ""
             
         except Exception as e:
             logger.error(f"Failed to trace document processing: {e}")
@@ -538,13 +543,48 @@ class LangfuseClient:
             logger.error(f"Failed to score generation: {e}")
             return False
     
+    def _send_batch_direct(self, items: List[Dict[str, Any]]) -> bool:
+        """Send batch directly to Langfuse using working HTTP method (bypasses SDK flush 404)"""
+        if not self.auth or not items:
+            return False
+        
+        payload = {"batch": items}
+        
+        try:
+            response = requests.post(
+                self.ingestion_url,
+                json=payload,
+                auth=self.auth,
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            
+            if response.status_code in [200, 201, 202, 207]:
+                logger.debug(f"Successfully sent batch of {len(items)} items to Langfuse")
+                return True
+            else:
+                logger.error(f"Failed to send batch: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending batch to Langfuse: {e}")
+            return False
+    
     def flush(self):
-        """Flush pending traces to Langfuse"""
-        if self.client:
-            try:
+        """Flush pending traces to Langfuse using working method"""
+        if not self.is_enabled():
+            return
+            
+        try:
+            # Try SDK flush first (in case it works in future versions)
+            if self.client:
                 self.client.flush()
-            except Exception as e:
-                logger.error(f"Failed to flush Langfuse client: {e}")
+                logger.debug("Successfully flushed using SDK method")
+        except Exception as e:
+            logger.warning(f"SDK flush failed (known 404 issue): {e}")
+            logger.info("Note: This is a known issue with Langfuse SDK v3.x flush method")
+            # We don't send direct batches here because individual trace methods 
+            # now handle sending directly to avoid the flush 404 issue
 
 
 # Global Langfuse client instance
