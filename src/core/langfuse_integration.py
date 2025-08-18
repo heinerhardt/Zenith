@@ -104,122 +104,6 @@ class LangfuseClient:
         """Check if Langfuse is properly configured and enabled"""
         return bool(self.client and self.tracing_enabled)
     
-    def _create_trace_compatible(self, **kwargs):
-        """Create trace using Langfuse v3.x SDK pattern"""
-        if not self.client:
-            return None
-            
-        try:
-            if self._trace_method == 'sdk_v3_spans':
-                # Langfuse v3.x pattern: create_trace_id + start_span
-                trace_id = self.client.create_trace_id()
-                
-                # Create a wrapper that mimics the old trace object
-                class LangfuseV3Trace:
-                    def __init__(self, client, trace_id, name=None, input=None, output=None, metadata=None):
-                        self.client = client
-                        self.id = trace_id
-                        self.name = name
-                        self.input = input
-                        self.output = output
-                        self.metadata = metadata or {}
-                        
-                        # Update current trace context
-                        self.client.update_current_trace(
-                            name=name,
-                            input=input,
-                            output=output,
-                            metadata=metadata
-                        )
-                        
-                    def span(self, name, input=None, output=None, metadata=None):
-                        """Create a span within this trace using context"""
-                        span = self.client.start_as_current_span(
-                            name=name,
-                            input=input,
-                            output=output,
-                            metadata=metadata
-                        )
-                        return span
-                        
-                    def generation(self, name, model=None, input=None, output=None, metadata=None):
-                        """Create a generation within this trace using context"""
-                        generation = self.client.start_as_current_generation(
-                            name=name,
-                            model=model,
-                            input=input,
-                            output=output,
-                            metadata=metadata
-                        )
-                        
-                        # Wrap the context manager to add an end() method for compatibility
-                        class GenerationWrapper:
-                            def __init__(self, context_manager):
-                                self.context_manager = context_manager
-                                self._entered = False
-                                self._generation = None
-                                
-                            def __enter__(self):
-                                self._generation = self.context_manager.__enter__()
-                                self._entered = True
-                                return self
-                                
-                            def __exit__(self, exc_type, exc_val, exc_tb):
-                                if self._entered:
-                                    return self.context_manager.__exit__(exc_type, exc_val, exc_tb)
-                                
-                            def end(self):
-                                """Compatibility method - for v3.x this is handled by context manager"""
-                                if self._entered:
-                                    self.__exit__(None, None, None)
-                                    self._entered = False
-                        
-                        return GenerationWrapper(generation)
-                
-                trace = LangfuseV3Trace(
-                    self.client, 
-                    trace_id, 
-                    name=kwargs.get('name'),
-                    input=kwargs.get('input'),
-                    output=kwargs.get('output'),
-                    metadata=kwargs.get('metadata')
-                )
-                
-                logger.debug(f"Created trace using SDK v3.x: {trace.id}")
-                return trace
-                
-            elif self._trace_method == 'sdk_v3_events':
-                # Fallback to events if span pattern doesn't work
-                event = self.client.create_event(
-                    name=kwargs.get('name', 'trace'),
-                    input=kwargs.get('input'),
-                    output=kwargs.get('output'),
-                    metadata=kwargs.get('metadata', {})
-                )
-                
-                # Create a simple wrapper
-                class LangfuseV3Event:
-                    def __init__(self, event):
-                        self.id = getattr(event, 'id', 'event-trace')
-                        
-                    def span(self, **kwargs):
-                        return self
-                        
-                    def generation(self, **kwargs):
-                        return self
-                        
-                    def end(self):
-                        pass
-                
-                logger.debug(f"Created event-based trace: {event}")
-                return LangfuseV3Event(event)
-            else:
-                logger.error(f"Unknown trace method: {self._trace_method}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Failed to create trace: {e}")
-            return None
     
     def trace_chat_interaction(self, 
                               user_input: str, 
@@ -379,43 +263,70 @@ class LangfuseClient:
                           retrieval_time: float,
                           metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a search/retrieval query
+        Trace a search/retrieval query using working direct HTTP method
         Returns: trace_id for the traced query
         """
         if not self.is_enabled():
             return ""
         
         try:
-            # Create a new trace for search
-            trace = self._create_trace_compatible(
-                name="search_query",
-                user_id=metadata.get("user_id") if metadata else None,
-                session_id=metadata.get("session_id") if metadata else None,
-                metadata={
-                    "project": self.project_name,
-                    **(metadata or {})
+            # Generate IDs
+            trace_id = str(uuid.uuid4()).replace('-', '')
+            span_id = str(uuid.uuid4()).replace('-', '')
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create trace item
+            trace_item = {
+                "id": trace_id,
+                "type": "trace-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": trace_id,
+                    "name": "search_query",
+                    "user_id": metadata.get("user_id") if metadata else None,
+                    "session_id": metadata.get("session_id") if metadata else None,
+                    "input": {"query": query},
+                    "output": {
+                        "results_count": results_count,
+                        "retrieval_time_seconds": retrieval_time
+                    },
+                    "metadata": {
+                        "project": self.project_name,
+                        **(metadata or {})
+                    }
                 }
-            )
+            }
             
-            # Create span for the search
-            span = trace.span(
-                name="vector_search",
-                input={"query": query},
-                output={
-                    "results_count": results_count,
-                    "retrieval_time_seconds": retrieval_time
-                },
-                metadata={
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    **(metadata or {})
+            # Create span item
+            span_item = {
+                "id": span_id,
+                "type": "span-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": span_id,
+                    "trace_id": trace_id,
+                    "name": "vector_search",
+                    "input": {"query": query},
+                    "output": {
+                        "results_count": results_count,
+                        "retrieval_time_seconds": retrieval_time
+                    },
+                    "metadata": {
+                        "timestamp": timestamp,
+                        **(metadata or {})
+                    }
                 }
-            )
+            }
             
-            # End the span
-            span.end()
+            # Send directly using working HTTP method
+            success = self._send_batch_direct([trace_item, span_item])
             
-            logger.debug(f"Traced search query with trace_id: {trace.id}")
-            return str(trace.id)
+            if success:
+                logger.debug(f"Successfully traced search query: {trace_id}")
+                return trace_id
+            else:
+                logger.error("Failed to send search query trace")
+                return ""
             
         except Exception as e:
             logger.error(f"Failed to trace search query: {e}")
@@ -431,60 +342,91 @@ class LangfuseClient:
                                total_time: float,
                                metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a complete RAG flow with all components
+        Trace a complete RAG flow with all components using working direct HTTP method
         Returns: trace_id for the traced flow
         """
         if not self.is_enabled():
             return ""
         
         try:
-            # Create a new trace for the complete RAG flow
-            trace = self._create_trace_compatible(
-                name="rag_flow",
-                user_id=metadata.get("user_id") if metadata else None,
-                session_id=metadata.get("session_id") if metadata else None,
-                input=user_input,
-                output=llm_response,
-                metadata={
-                    "project": self.project_name,
-                    "provider": provider,
+            # Generate IDs
+            trace_id = str(uuid.uuid4()).replace('-', '')
+            search_span_id = str(uuid.uuid4()).replace('-', '')
+            generation_id = str(uuid.uuid4()).replace('-', '')
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create trace item
+            trace_item = {
+                "id": trace_id,
+                "type": "trace-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": trace_id,
+                    "name": "rag_flow",
+                    "user_id": metadata.get("user_id") if metadata else None,
+                    "session_id": metadata.get("session_id") if metadata else None,
+                    "input": user_input,
+                    "output": llm_response,
+                    "metadata": {
+                        "project": self.project_name,
+                        "provider": provider,
+                        "model": model,
+                        "total_time_seconds": total_time,
+                        **(metadata or {})
+                    }
+                }
+            }
+            
+            # Create search span item
+            search_span_item = {
+                "id": search_span_id,
+                "type": "span-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": search_span_id,
+                    "trace_id": trace_id,
+                    "name": "vector_search",
+                    "input": {"query": search_query},
+                    "output": {
+                        "results_count": len(search_results),
+                        "results": search_results[:3] if search_results else []  # First 3 results for brevity
+                    },
+                    "metadata": {
+                        "search_type": "similarity_search",
+                        "user_filter": metadata.get("user_filter", False) if metadata else False
+                    }
+                }
+            }
+            
+            # Create generation item
+            generation_item = {
+                "id": generation_id,
+                "type": "generation-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": generation_id,
+                    "trace_id": trace_id,
+                    "name": "llm_generation",
                     "model": model,
-                    "total_time_seconds": total_time,
-                    **(metadata or {})
+                    "input": user_input,
+                    "output": llm_response,
+                    "metadata": {
+                        "provider": provider,
+                        "context_documents": len(search_results),
+                        "use_rag": len(search_results) > 0
+                    }
                 }
-            )
+            }
             
-            # 1. Search span
-            search_span = trace.span(
-                name="vector_search",
-                input={"query": search_query},
-                output={
-                    "results_count": len(search_results),
-                    "results": search_results[:3] if search_results else []  # First 3 results for brevity
-                },
-                metadata={
-                    "search_type": "similarity_search",
-                    "user_filter": metadata.get("user_filter", False) if metadata else False
-                }
-            )
-            search_span.end()
+            # Send all items in batch using working HTTP method
+            success = self._send_batch_direct([trace_item, search_span_item, generation_item])
             
-            # 2. LLM Generation span
-            generation = trace.generation(
-                name="llm_generation",
-                model=model,
-                input=user_input,
-                output=llm_response,
-                metadata={
-                    "provider": provider,
-                    "context_documents": len(search_results),
-                    "use_rag": len(search_results) > 0
-                }
-            )
-            generation.end()
-            
-            logger.debug(f"Traced complete RAG flow with trace_id: {trace.id}")
-            return str(trace.id)
+            if success:
+                logger.debug(f"Successfully traced complete RAG flow: {trace_id}")
+                return trace_id
+            else:
+                logger.error("Failed to send RAG flow trace")
+                return ""
             
         except Exception as e:
             logger.error(f"Failed to trace RAG flow: {e}")
