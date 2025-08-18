@@ -145,7 +145,30 @@ class LangfuseClient:
                             output=output,
                             metadata=metadata
                         )
-                        return generation
+                        
+                        # Wrap the context manager to add an end() method for compatibility
+                        class GenerationWrapper:
+                            def __init__(self, context_manager):
+                                self.context_manager = context_manager
+                                self._entered = False
+                                self._generation = None
+                                
+                            def __enter__(self):
+                                self._generation = self.context_manager.__enter__()
+                                self._entered = True
+                                return self
+                                
+                            def __exit__(self, exc_type, exc_val, exc_tb):
+                                if self._entered:
+                                    return self.context_manager.__exit__(exc_type, exc_val, exc_tb)
+                                
+                            def end(self):
+                                """Compatibility method - for v3.x this is handled by context manager"""
+                                if self._entered:
+                                    self.__exit__(None, None, None)
+                                    self._entered = False
+                        
+                        return GenerationWrapper(generation)
                 
                 trace = LangfuseV3Trace(
                     self.client, 
@@ -199,46 +222,65 @@ class LangfuseClient:
                               model: str,
                               metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a chat interaction
+        Trace a chat interaction using Langfuse v3.x context API
         Returns: trace_id for the traced interaction
         """
         if not self.is_enabled():
             return ""
         
         try:
-            # Create a new trace
-            trace = self._create_trace_compatible(
-                name="chat_interaction",
-                user_id=metadata.get("user_id") if metadata else None,
-                session_id=metadata.get("session_id") if metadata else None,
-                input=user_input,
-                output=response,
-                metadata={
-                    "provider": provider,
-                    "model": model,
-                    "project": self.project_name,
-                    **(metadata or {})
-                }
-            )
-            
-            # Create generation span for the chat
-            generation = trace.generation(
-                name="llm_generation",
-                model=model,
-                input=user_input,
-                output=response,
-                metadata={
-                    "provider": provider,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    **(metadata or {})
-                }
-            )
-            
-            # End the generation
-            generation.end()
-            
-            logger.debug(f"Traced chat interaction with trace_id: {trace.id}")
-            return str(trace.id)
+            if self._trace_method == 'sdk_v3_spans':
+                # Use v3.x context-based API directly
+                trace_id = self.client.create_trace_id()
+                
+                # Update trace metadata
+                self.client.update_current_trace(
+                    name="chat_interaction",
+                    user_id=metadata.get("user_id") if metadata else None,
+                    session_id=metadata.get("session_id") if metadata else None,
+                    input=user_input,
+                    output=response,
+                    metadata={
+                        "provider": provider,
+                        "model": model,
+                        "project": self.project_name,
+                        **(metadata or {})
+                    }
+                )
+                
+                # Use context manager for generation
+                with self.client.start_as_current_generation(
+                    name="llm_generation",
+                    model=model,
+                    input=user_input,
+                    output=response,
+                    metadata={
+                        "provider": provider,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        **(metadata or {})
+                    }
+                ) as generation:
+                    # Generation automatically ends when context exits
+                    logger.debug(f"Started generation in context: {generation}")
+                
+                logger.debug(f"Traced chat interaction with trace_id: {trace_id}")
+                return str(trace_id)
+                
+            else:
+                # Fallback to event-based API
+                event = self.client.create_event(
+                    name="chat_interaction",
+                    input=user_input,
+                    output=response,
+                    metadata={
+                        "provider": provider,
+                        "model": model,
+                        "project": self.project_name,
+                        **(metadata or {})
+                    }
+                )
+                logger.debug(f"Created chat event: {event}")
+                return str(getattr(event, 'id', 'event-based'))
             
         except Exception as e:
             logger.error(f"Failed to trace chat interaction: {e}")
@@ -251,44 +293,66 @@ class LangfuseClient:
                                  success: bool,
                                  metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace document processing
+        Trace document processing using Langfuse v3.x context API
         Returns: trace_id for the traced processing
         """
         if not self.is_enabled():
             return ""
         
         try:
-            # Create a new trace for document processing
-            trace = self._create_trace_compatible(
-                name="document_processing",
-                user_id=metadata.get("user_id") if metadata else None,
-                metadata={
-                    "project": self.project_name,
-                    "document_filename": filename,
-                    **(metadata or {})
-                }
-            )
-            
-            # Create span for the processing
-            span = trace.span(
-                name="pdf_processing",
-                input={"filename": filename},
-                output={
-                    "chunk_count": chunk_count,
-                    "processing_time_seconds": processing_time,
-                    "success": success
-                },
-                metadata={
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    **(metadata or {})
-                }
-            )
-            
-            # End the span
-            span.end()
-            
-            logger.debug(f"Traced document processing with trace_id: {trace.id}")
-            return str(trace.id)
+            if self._trace_method == 'sdk_v3_spans':
+                # Use v3.x context-based API
+                trace_id = self.client.create_trace_id()
+                
+                # Update trace metadata
+                self.client.update_current_trace(
+                    name="document_processing",
+                    user_id=metadata.get("user_id") if metadata else None,
+                    metadata={
+                        "project": self.project_name,
+                        "document_filename": filename,
+                        **(metadata or {})
+                    }
+                )
+                
+                # Use context manager for span
+                with self.client.start_as_current_span(
+                    name="pdf_processing",
+                    input={"filename": filename},
+                    output={
+                        "chunk_count": chunk_count,
+                        "processing_time_seconds": processing_time,
+                        "success": success
+                    },
+                    metadata={
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        **(metadata or {})
+                    }
+                ) as span:
+                    # Span automatically ends when context exits
+                    logger.debug(f"Started processing span in context: {span}")
+                
+                logger.debug(f"Traced document processing with trace_id: {trace_id}")
+                return str(trace_id)
+                
+            else:
+                # Fallback to event-based API
+                event = self.client.create_event(
+                    name="document_processing",
+                    input={"filename": filename},
+                    output={
+                        "chunk_count": chunk_count,
+                        "processing_time_seconds": processing_time,
+                        "success": success
+                    },
+                    metadata={
+                        "project": self.project_name,
+                        "document_filename": filename,
+                        **(metadata or {})
+                    }
+                )
+                logger.debug(f"Created document processing event: {event}")
+                return str(getattr(event, 'id', 'event-based'))
             
         except Exception as e:
             logger.error(f"Failed to trace document processing: {e}")
