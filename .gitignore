@@ -81,7 +81,7 @@ ipython_config.py
 .idea/
 
 # Serena
-.serena
+.serena/
 
 # Coverage reports
 htmlcov/
