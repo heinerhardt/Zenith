@@ -432,6 +432,95 @@ class LangfuseClient:
             logger.error(f"Failed to trace RAG flow: {e}")
             return ""
     
+    def trace_session(self,
+                     session_id: str,
+                     user_id: Optional[str] = None,
+                     session_data: Optional[Dict[str, Any]] = None,
+                     metadata: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Trace a user session using working direct HTTP method
+        Returns: session_id for the traced session
+        """
+        if not self.is_enabled():
+            return ""
+        
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create session item
+            session_item = {
+                "id": session_id,
+                "type": "session-create",
+                "timestamp": timestamp,
+                "body": {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "metadata": {
+                        "project": self.project_name,
+                        "session_data": session_data or {},
+                        **(metadata or {})
+                    }
+                }
+            }
+            
+            # Send directly using working HTTP method
+            success = self._send_batch_direct([session_item])
+            
+            if success:
+                logger.debug(f"Successfully traced session: {session_id}")
+                return session_id
+            else:
+                logger.error("Failed to send session trace")
+                return ""
+            
+        except Exception as e:
+            logger.error(f"Failed to trace session: {e}")
+            return ""
+    
+    def update_session(self,
+                      session_id: str,
+                      session_data: Optional[Dict[str, Any]] = None,
+                      metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Update an existing session with new data
+        Returns: True if successful
+        """
+        if not self.is_enabled():
+            return False
+        
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            
+            # Create session update item
+            session_update_item = {
+                "id": str(uuid.uuid4()).replace('-', ''),
+                "type": "session-update",
+                "timestamp": timestamp,
+                "body": {
+                    "id": session_id,
+                    "metadata": {
+                        "project": self.project_name,
+                        "session_data": session_data or {},
+                        "updated_at": timestamp,
+                        **(metadata or {})
+                    }
+                }
+            }
+            
+            # Send directly using working HTTP method
+            success = self._send_batch_direct([session_update_item])
+            
+            if success:
+                logger.debug(f"Successfully updated session: {session_id}")
+                return True
+            else:
+                logger.error("Failed to send session update")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Failed to update session: {e}")
+            return False
+    
     def create_evaluation_dataset(self, 
                                  dataset_name: str, 
                                  examples: List[Dict[str, Any]]) -> bool:
@@ -640,3 +729,24 @@ def flush_langfuse():
     client = get_langfuse_client()
     if client:
         client.flush()
+
+
+def trace_session_if_enabled(session_id: str,
+                             user_id: Optional[str] = None,
+                             session_data: Optional[Dict[str, Any]] = None,
+                             metadata: Optional[Dict[str, Any]] = None) -> str:
+    """Convenience function to trace sessions if Langfuse is enabled"""
+    client = get_langfuse_client()
+    if client:
+        return client.trace_session(session_id, user_id, session_data, metadata)
+    return ""
+
+
+def update_session_if_enabled(session_id: str,
+                              session_data: Optional[Dict[str, Any]] = None,
+                              metadata: Optional[Dict[str, Any]] = None) -> bool:
+    """Convenience function to update sessions if Langfuse is enabled"""
+    client = get_langfuse_client()
+    if client:
+        return client.update_session(session_id, session_data, metadata)
+    return False
