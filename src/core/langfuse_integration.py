@@ -438,52 +438,56 @@ class LangfuseClient:
                      session_data: Optional[Dict[str, Any]] = None,
                      metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a user session as a trace (sessions appear as special traces in Langfuse)
+        Initialize a session by creating a session start trace
+        Sessions appear in Langfuse Sessions UI when traces have session_id field
         Returns: session_id for the traced session
         """
         if not self.is_enabled():
             return ""
         
         try:
+            # Generate unique trace ID (different from session_id)
+            trace_id = str(uuid.uuid4()).replace('-', '')
             timestamp = datetime.now(timezone.utc).isoformat()
             
-            # Create session as a trace (this is how Langfuse handles sessions)
-            session_item = {
-                "id": session_id,
+            # Create session start trace - this will populate Sessions UI
+            session_start_item = {
+                "id": trace_id,
                 "type": "trace-create",
                 "timestamp": timestamp,
                 "body": {
-                    "id": session_id,
-                    "name": "user_session",
+                    "id": trace_id,
+                    "name": "session_start",
                     "user_id": user_id,
-                    "session_id": session_id,
+                    "session_id": session_id,  # This is the key for Sessions UI
                     "input": {
-                        "session_start": True,
+                        "action": "session_start",
                         "user_id": user_id,
-                        **(session_data or {})
+                        "session_data": session_data or {},
+                        "timestamp": timestamp
                     },
                     "output": {
-                        "session_status": "active"
+                        "session_id": session_id,
+                        "session_status": "started",
+                        "user_id": user_id
                     },
                     "metadata": {
                         "project": self.project_name,
-                        "session_type": "user_session",
-                        "is_session": True,
+                        "session_type": "initialization",
                         "session_data": session_data or {},
-                        "created_at": timestamp,
                         **(metadata or {})
                     }
                 }
             }
             
             # Send directly using working HTTP method
-            success = self._send_batch_direct([session_item])
+            success = self._send_batch_direct([session_start_item])
             
             if success:
-                logger.debug(f"Successfully traced session: {session_id}")
+                logger.debug(f"Successfully initialized session: {session_id}")
                 return session_id
             else:
-                logger.error("Failed to send session trace")
+                logger.error("Failed to send session start trace")
                 return ""
             
         except Exception as e:
