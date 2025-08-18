@@ -230,38 +230,49 @@ class LangfuseClient:
         
         try:
             if self._trace_method == 'sdk_v3_spans':
-                # Use v3.x context-based API directly
+                # Use v3.x context-based API with proper span context
                 trace_id = self.client.create_trace_id()
                 
-                # Update trace metadata
-                self.client.update_current_trace(
+                # First create a span context, then add generation within it
+                with self.client.start_as_current_span(
                     name="chat_interaction",
-                    user_id=metadata.get("user_id") if metadata else None,
-                    session_id=metadata.get("session_id") if metadata else None,
                     input=user_input,
                     output=response,
                     metadata={
                         "provider": provider,
-                        "model": model,
                         "project": self.project_name,
                         **(metadata or {})
                     }
-                )
-                
-                # Use context manager for generation
-                with self.client.start_as_current_generation(
-                    name="llm_generation",
-                    model=model,
-                    input=user_input,
-                    output=response,
-                    metadata={
-                        "provider": provider,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        **(metadata or {})
-                    }
-                ) as generation:
-                    # Generation automatically ends when context exits
-                    logger.debug(f"Started generation in context: {generation}")
+                ) as span:
+                    logger.debug(f"Started chat span in context: {span}")
+                    
+                    # Now update trace metadata within the span context
+                    self.client.update_current_trace(
+                        name="chat_interaction",
+                        user_id=metadata.get("user_id") if metadata else None,
+                        session_id=metadata.get("session_id") if metadata else None,
+                        metadata={
+                            "provider": provider,
+                            "model": model,
+                            "project": self.project_name,
+                            **(metadata or {})
+                        }
+                    )
+                    
+                    # Add generation within the span context
+                    with self.client.start_as_current_generation(
+                        name="llm_generation",
+                        model=model,
+                        input=user_input,
+                        output=response,
+                        metadata={
+                            "provider": provider,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            **(metadata or {})
+                        }
+                    ) as generation:
+                        # Generation automatically ends when context exits
+                        logger.debug(f"Started generation in context: {generation}")
                 
                 logger.debug(f"Traced chat interaction with trace_id: {trace_id}")
                 return str(trace_id)
@@ -301,21 +312,10 @@ class LangfuseClient:
         
         try:
             if self._trace_method == 'sdk_v3_spans':
-                # Use v3.x context-based API
+                # Use v3.x context-based API with proper span context
                 trace_id = self.client.create_trace_id()
                 
-                # Update trace metadata
-                self.client.update_current_trace(
-                    name="document_processing",
-                    user_id=metadata.get("user_id") if metadata else None,
-                    metadata={
-                        "project": self.project_name,
-                        "document_filename": filename,
-                        **(metadata or {})
-                    }
-                )
-                
-                # Use context manager for span
+                # Create span context first
                 with self.client.start_as_current_span(
                     name="pdf_processing",
                     input={"filename": filename},
@@ -329,8 +329,18 @@ class LangfuseClient:
                         **(metadata or {})
                     }
                 ) as span:
-                    # Span automatically ends when context exits
                     logger.debug(f"Started processing span in context: {span}")
+                    
+                    # Update trace metadata within the span context
+                    self.client.update_current_trace(
+                        name="document_processing",
+                        user_id=metadata.get("user_id") if metadata else None,
+                        metadata={
+                            "project": self.project_name,
+                            "document_filename": filename,
+                            **(metadata or {})
+                        }
+                    )
                 
                 logger.debug(f"Traced document processing with trace_id: {trace_id}")
                 return str(trace_id)
