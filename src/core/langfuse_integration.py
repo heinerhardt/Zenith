@@ -439,7 +439,7 @@ class LangfuseClient:
                      metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         Initialize a session by creating a session start trace
-        Sessions appear in Langfuse Sessions UI when traces have session_id field
+        Note: View sessions in Traces tab by filtering session_id (Sessions UI may not be available in all Langfuse versions)
         Returns: session_id for the traced session
         """
         if not self.is_enabled():
@@ -450,7 +450,7 @@ class LangfuseClient:
             trace_id = str(uuid.uuid4()).replace('-', '')
             timestamp = datetime.now(timezone.utc).isoformat()
             
-            # Create session start trace - this will populate Sessions UI
+            # Create session start trace with clear labeling for easy discovery
             session_start_item = {
                 "id": trace_id,
                 "type": "trace-create",
@@ -459,22 +459,26 @@ class LangfuseClient:
                     "id": trace_id,
                     "name": "session_start",
                     "user_id": user_id,
-                    "session_id": session_id,  # This is the key for Sessions UI
+                    "session_id": session_id,  # Key field for session grouping
                     "input": {
                         "action": "session_start",
                         "user_id": user_id,
                         "session_data": session_data or {},
-                        "timestamp": timestamp
+                        "timestamp": timestamp,
+                        "session_identifier": session_id  # Additional identifier
                     },
                     "output": {
                         "session_id": session_id,
                         "session_status": "started",
-                        "user_id": user_id
+                        "user_id": user_id,
+                        "initialization_successful": True
                     },
                     "metadata": {
                         "project": self.project_name,
-                        "session_type": "initialization",
+                        "session_type": "initialization", 
                         "session_data": session_data or {},
+                        "searchable_session_id": session_id,  # For easy Traces tab search
+                        "session_lifecycle": "start",
                         **(metadata or {})
                     }
                 }
@@ -484,7 +488,7 @@ class LangfuseClient:
             success = self._send_batch_direct([session_start_item])
             
             if success:
-                logger.debug(f"Successfully initialized session: {session_id}")
+                logger.info(f"Session initialized: {session_id} (Find in Traces tab by searching: {session_id})")
                 return session_id
             else:
                 logger.error("Failed to send session start trace")
@@ -645,6 +649,33 @@ class LangfuseClient:
             logger.info("Note: This is a known issue with Langfuse SDK v3.x flush method")
             # We don't send direct batches here because individual trace methods 
             # now handle sending directly to avoid the flush 404 issue
+    
+    def get_session_viewing_instructions(self, session_id: str) -> str:
+        """
+        Get instructions for viewing sessions in Langfuse UI
+        Returns: formatted instructions for finding sessions
+        """
+        return f"""
+HOW TO VIEW SESSION: {session_id}
+
+METHOD 1 - TRACES TAB (RECOMMENDED):
+1. Go to Langfuse UI → Tracing → Traces
+2. Search for: {session_id}
+3. Filter by session_id in metadata
+4. Sort by timestamp to see session flow
+
+METHOD 2 - EVENTS TAB:
+1. Go to Langfuse UI → Tracing → Events  
+2. Search for: session_update
+3. Look for events with session_id: {session_id}
+
+METHOD 3 - USER ACTIVITY:
+1. Filter by user_id to see all user sessions
+2. Group traces by session_id manually
+
+NOTE: Sessions UI may not be available in all Langfuse versions.
+Use Traces tab with session_id filter for complete session view.
+        """
 
 
 # Global Langfuse client instance
