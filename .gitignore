@@ -80,6 +80,9 @@ ipython_config.py
 # PyCharm
 .idea/
 
+# Serena
+.serena
+
 # Coverage reports
 htmlcov/
 .coverage
