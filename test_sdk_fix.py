@@ -131,7 +131,7 @@ def test_direct_sdk():
                     self.client = client
                     
                 def generation(self, name, model=None, input=None, output=None, metadata=None):
-                    return self.client.start_generation(
+                    return self.client.start_as_current_generation(
                         name=name,
                         model=model, 
                         input=input,

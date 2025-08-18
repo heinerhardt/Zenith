@@ -127,8 +127,8 @@ class LangfuseClient:
                         )
                         
                     def span(self, name, input=None, output=None, metadata=None):
-                        """Create a span within this trace"""
-                        span = self.client.start_span(
+                        """Create a span within this trace using context"""
+                        span = self.client.start_as_current_span(
                             name=name,
                             input=input,
                             output=output,
@@ -137,8 +137,8 @@ class LangfuseClient:
                         return span
                         
                     def generation(self, name, model=None, input=None, output=None, metadata=None):
-                        """Create a generation within this trace"""
-                        generation = self.client.start_generation(
+                        """Create a generation within this trace using context"""
+                        generation = self.client.start_as_current_generation(
                             name=name,
                             model=model,
                             input=input,
