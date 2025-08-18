@@ -49,13 +49,13 @@ class LangfuseClient:
             
             logger.info(f"Configured Langfuse client for host: {clean_host}")
             
-            # Test the SDK's high-level methods (v3.x uses create_trace)
-            if hasattr(self.client, 'create_trace'):
-                self._trace_method = 'sdk_v3'
-                logger.info("Using Langfuse SDK v3.x create_trace() method")
-            elif hasattr(self.client, 'trace'):
-                self._trace_method = 'sdk_v2'
-                logger.info("Using Langfuse SDK v2.x trace() method")
+            # Test the SDK's methods for v3.x (uses create_trace_id + start_span pattern)
+            if hasattr(self.client, 'create_trace_id') and hasattr(self.client, 'start_span'):
+                self._trace_method = 'sdk_v3_spans'
+                logger.info("Using Langfuse SDK v3.x create_trace_id + start_span pattern")
+            elif hasattr(self.client, 'create_event'):
+                self._trace_method = 'sdk_v3_events'
+                logger.info("Using Langfuse SDK v3.x create_event pattern")
             else:
                 logger.error("No compatible Langfuse SDK method found")
                 available_methods = [m for m in dir(self.client) if not m.startswith('_')]
@@ -99,21 +99,91 @@ class LangfuseClient:
         return bool(self.client and self.tracing_enabled)
     
     def _create_trace_compatible(self, **kwargs):
-        """Create trace using SDK's high-level methods (v2.x or v3.x)"""
+        """Create trace using Langfuse v3.x SDK pattern"""
         if not self.client:
             return None
             
         try:
-            if self._trace_method == 'sdk_v3':
-                # Langfuse v3.x API - uses create_trace()
-                trace = self.client.create_trace(**kwargs)
+            if self._trace_method == 'sdk_v3_spans':
+                # Langfuse v3.x pattern: create_trace_id + start_span
+                trace_id = self.client.create_trace_id()
+                
+                # Create a wrapper that mimics the old trace object
+                class LangfuseV3Trace:
+                    def __init__(self, client, trace_id, name=None, input=None, output=None, metadata=None):
+                        self.client = client
+                        self.id = trace_id
+                        self.name = name
+                        self.input = input
+                        self.output = output
+                        self.metadata = metadata or {}
+                        
+                        # Update current trace context
+                        self.client.update_current_trace(
+                            name=name,
+                            input=input,
+                            output=output,
+                            metadata=metadata
+                        )
+                        
+                    def span(self, name, input=None, output=None, metadata=None):
+                        """Create a span within this trace"""
+                        span = self.client.start_span(
+                            name=name,
+                            input=input,
+                            output=output,
+                            metadata=metadata
+                        )
+                        return span
+                        
+                    def generation(self, name, model=None, input=None, output=None, metadata=None):
+                        """Create a generation within this trace"""
+                        generation = self.client.start_generation(
+                            name=name,
+                            model=model,
+                            input=input,
+                            output=output,
+                            metadata=metadata
+                        )
+                        return generation
+                
+                trace = LangfuseV3Trace(
+                    self.client, 
+                    trace_id, 
+                    name=kwargs.get('name'),
+                    input=kwargs.get('input'),
+                    output=kwargs.get('output'),
+                    metadata=kwargs.get('metadata')
+                )
+                
                 logger.debug(f"Created trace using SDK v3.x: {trace.id}")
                 return trace
-            elif self._trace_method == 'sdk_v2':
-                # Langfuse v2.x API - uses trace()
-                trace = self.client.trace(**kwargs)
-                logger.debug(f"Created trace using SDK v2.x: {trace.id}")
-                return trace
+                
+            elif self._trace_method == 'sdk_v3_events':
+                # Fallback to events if span pattern doesn't work
+                event = self.client.create_event(
+                    name=kwargs.get('name', 'trace'),
+                    input=kwargs.get('input'),
+                    output=kwargs.get('output'),
+                    metadata=kwargs.get('metadata', {})
+                )
+                
+                # Create a simple wrapper
+                class LangfuseV3Event:
+                    def __init__(self, event):
+                        self.id = getattr(event, 'id', 'event-trace')
+                        
+                    def span(self, **kwargs):
+                        return self
+                        
+                    def generation(self, **kwargs):
+                        return self
+                        
+                    def end(self):
+                        pass
+                
+                logger.debug(f"Created event-based trace: {event}")
+                return LangfuseV3Event(event)
             else:
                 logger.error(f"Unknown trace method: {self._trace_method}")
                 return None

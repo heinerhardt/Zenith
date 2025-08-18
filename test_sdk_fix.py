@@ -108,21 +108,38 @@ def test_direct_sdk():
         
         print("✅ Direct client created")
         
-        # Create trace using SDK method (v3.x uses create_trace)
-        if hasattr(client, 'create_trace'):
-            trace = client.create_trace(
+        # Create trace using Langfuse v3.x pattern
+        if hasattr(client, 'create_trace_id'):
+            print("✅ Using Langfuse v3.x create_trace_id pattern")
+            
+            # Step 1: Create trace ID
+            trace_id = client.create_trace_id()
+            print(f"✅ Created trace ID: {trace_id}")
+            
+            # Step 2: Update trace with metadata
+            client.update_current_trace(
                 name="sdk-test-trace",
                 input={"message": "test input"},
                 metadata={"source": "direct_sdk_test"}
             )
-            print("✅ Using Langfuse v3.x create_trace() method")
-        elif hasattr(client, 'trace'):
-            trace = client.trace(
-                name="sdk-test-trace",
-                input={"message": "test input"},
-                metadata={"source": "direct_sdk_test"}
-            )
-            print("✅ Using Langfuse v2.x trace() method")
+            print("✅ Updated trace metadata")
+            
+            # Create a simple wrapper for compatibility
+            class TraceWrapper:
+                def __init__(self, client, trace_id):
+                    self.id = trace_id
+                    self.client = client
+                    
+                def generation(self, name, model=None, input=None, output=None, metadata=None):
+                    return self.client.start_generation(
+                        name=name,
+                        model=model, 
+                        input=input,
+                        output=output,
+                        metadata=metadata
+                    )
+            
+            trace = TraceWrapper(client, trace_id)
         else:
             print("❌ No compatible trace method found")
             available_methods = [m for m in dir(client) if not m.startswith('_')]
