@@ -49,13 +49,17 @@ class LangfuseClient:
             
             logger.info(f"Configured Langfuse client for host: {clean_host}")
             
-            # Test the SDK's high-level methods
-            if hasattr(self.client, 'trace'):
-                self._trace_method = 'sdk_trace'
-                logger.info("Using Langfuse SDK trace() method")
+            # Test the SDK's high-level methods (v3.x uses create_trace)
+            if hasattr(self.client, 'create_trace'):
+                self._trace_method = 'sdk_v3'
+                logger.info("Using Langfuse SDK v3.x create_trace() method")
+            elif hasattr(self.client, 'trace'):
+                self._trace_method = 'sdk_v2'
+                logger.info("Using Langfuse SDK v2.x trace() method")
             else:
-                logger.error("Langfuse SDK trace() method not available")
-                logger.error("Please upgrade: pip install --upgrade langfuse>=2.50.0")
+                logger.error("No compatible Langfuse SDK method found")
+                available_methods = [m for m in dir(self.client) if not m.startswith('_')]
+                logger.error(f"Available methods: {available_methods}")
                 self.client = None
                 return
                 
@@ -95,15 +99,24 @@ class LangfuseClient:
         return bool(self.client and self.tracing_enabled)
     
     def _create_trace_compatible(self, **kwargs):
-        """Create trace using SDK's high-level trace() method"""
+        """Create trace using SDK's high-level methods (v2.x or v3.x)"""
         if not self.client:
             return None
             
         try:
-            # Use the SDK's high-level trace() method - it handles everything internally
-            trace = self.client.trace(**kwargs)
-            logger.debug(f"Created trace using SDK: {trace.id}")
-            return trace
+            if self._trace_method == 'sdk_v3':
+                # Langfuse v3.x API - uses create_trace()
+                trace = self.client.create_trace(**kwargs)
+                logger.debug(f"Created trace using SDK v3.x: {trace.id}")
+                return trace
+            elif self._trace_method == 'sdk_v2':
+                # Langfuse v2.x API - uses trace()
+                trace = self.client.trace(**kwargs)
+                logger.debug(f"Created trace using SDK v2.x: {trace.id}")
+                return trace
+            else:
+                logger.error(f"Unknown trace method: {self._trace_method}")
+                return None
                 
         except Exception as e:
             logger.error(f"Failed to create trace: {e}")

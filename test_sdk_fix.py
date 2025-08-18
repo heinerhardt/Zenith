@@ -108,12 +108,26 @@ def test_direct_sdk():
         
         print("✅ Direct client created")
         
-        # Create trace using SDK method
-        trace = client.trace(
-            name="sdk-test-trace",
-            input={"message": "test input"},
-            metadata={"source": "direct_sdk_test"}
-        )
+        # Create trace using SDK method (v3.x uses create_trace)
+        if hasattr(client, 'create_trace'):
+            trace = client.create_trace(
+                name="sdk-test-trace",
+                input={"message": "test input"},
+                metadata={"source": "direct_sdk_test"}
+            )
+            print("✅ Using Langfuse v3.x create_trace() method")
+        elif hasattr(client, 'trace'):
+            trace = client.trace(
+                name="sdk-test-trace",
+                input={"message": "test input"},
+                metadata={"source": "direct_sdk_test"}
+            )
+            print("✅ Using Langfuse v2.x trace() method")
+        else:
+            print("❌ No compatible trace method found")
+            available_methods = [m for m in dir(client) if not m.startswith('_')]
+            print(f"Available methods: {available_methods}")
+            return False
         
         print(f"✅ Direct trace created: {trace.id}")
         
