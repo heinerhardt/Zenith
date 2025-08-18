@@ -438,7 +438,7 @@ class LangfuseClient:
                      session_data: Optional[Dict[str, Any]] = None,
                      metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Trace a user session using working direct HTTP method
+        Trace a user session as a trace (sessions appear as special traces in Langfuse)
         Returns: session_id for the traced session
         """
         if not self.is_enabled():
@@ -447,17 +447,30 @@ class LangfuseClient:
         try:
             timestamp = datetime.now(timezone.utc).isoformat()
             
-            # Create session item
+            # Create session as a trace (this is how Langfuse handles sessions)
             session_item = {
                 "id": session_id,
-                "type": "session-create",
+                "type": "trace-create",
                 "timestamp": timestamp,
                 "body": {
                     "id": session_id,
+                    "name": "user_session",
                     "user_id": user_id,
+                    "session_id": session_id,
+                    "input": {
+                        "session_start": True,
+                        "user_id": user_id,
+                        **(session_data or {})
+                    },
+                    "output": {
+                        "session_status": "active"
+                    },
                     "metadata": {
                         "project": self.project_name,
+                        "session_type": "user_session",
+                        "is_session": True,
                         "session_data": session_data or {},
+                        "created_at": timestamp,
                         **(metadata or {})
                     }
                 }
@@ -482,7 +495,7 @@ class LangfuseClient:
                       session_data: Optional[Dict[str, Any]] = None,
                       metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
-        Update an existing session with new data
+        Update an existing session by creating a session update event
         Returns: True if successful
         """
         if not self.is_enabled():
@@ -491,17 +504,29 @@ class LangfuseClient:
         try:
             timestamp = datetime.now(timezone.utc).isoformat()
             
-            # Create session update item
+            # Create session update as an event
+            update_event_id = str(uuid.uuid4()).replace('-', '')
             session_update_item = {
-                "id": str(uuid.uuid4()).replace('-', ''),
-                "type": "session-update",
+                "id": update_event_id,
+                "type": "event-create",
                 "timestamp": timestamp,
                 "body": {
-                    "id": session_id,
+                    "id": update_event_id,
+                    "name": "session_update",
+                    "input": {
+                        "session_id": session_id,
+                        "action": "update"
+                    },
+                    "output": {
+                        "update_successful": True,
+                        "session_data": session_data or {}
+                    },
                     "metadata": {
                         "project": self.project_name,
-                        "session_data": session_data or {},
+                        "session_id": session_id,
+                        "update_type": "session_update",
                         "updated_at": timestamp,
+                        "session_data": session_data or {},
                         **(metadata or {})
                     }
                 }
