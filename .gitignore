@@ -131,3 +131,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Claude
+claude_config.json
+.claude/*
+CLAUDE.md
