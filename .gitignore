@@ -41,6 +41,10 @@ venv.bak/
 .env.local
 .env.production
 
+# MCP Custom Configurations
+mcp_config.json
+.mcp.json
+
 # Logs
 logs/
 *.log

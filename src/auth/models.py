@@ -310,21 +310,21 @@ class SystemSettings:
     def get_effective_chat_provider(self) -> str:
         """
         Get the effective chat provider with priority logic:
-        1. If Ollama is enabled in settings, use Ollama
-        2. Otherwise, use the preferred setting
+        1. Use preferred provider setting (respects .env overrides)
+        2. Fall back to openai if Ollama is preferred but disabled
         """
-        if self.ollama_enabled:
-            return "ollama"
+        if self.preferred_chat_provider == "ollama" and not self.ollama_enabled:
+            return "openai"
         return self.preferred_chat_provider
     
     def get_effective_embedding_provider(self) -> str:
         """
         Get the effective embedding provider with priority logic:
-        1. If Ollama is enabled in settings, use Ollama
-        2. Otherwise, use the preferred setting
+        1. Use preferred provider setting (respects .env overrides)
+        2. Fall back to openai if Ollama is preferred but disabled
         """
-        if self.ollama_enabled:
-            return "ollama"
+        if self.preferred_embedding_provider == "ollama" and not self.ollama_enabled:
+            return "openai"
         return self.preferred_embedding_provider
     
     def is_ollama_enabled(self) -> bool:

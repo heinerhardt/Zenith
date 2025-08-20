@@ -195,19 +195,19 @@ class EnhancedSettingsManager:
         if not settings.langfuse_secret_key and config.langfuse_secret_key:
             settings.langfuse_secret_key = config.langfuse_secret_key
         
-        # CRITICAL: Apply Ollama enabled override from .env
-        # This ensures .env OLLAMA_ENABLED=True is respected
-        if config.ollama_enabled and not settings.ollama_enabled:
-            settings.ollama_enabled = True
-            logger.info("Ollama enabled via .env configuration")
+        # CRITICAL: Apply .env overrides - .env always takes precedence
+        # Override Ollama enabled status from .env
+        settings.ollama_enabled = config.ollama_enabled
+        logger.info(f"Applied .env Ollama enabled override: {config.ollama_enabled}")
         
-        # CRITICAL: Force provider selection when Ollama is enabled in .env OR admin
-        if settings.ollama_enabled or config.ollama_enabled:
-            # Force both settings to be consistent
-            settings.ollama_enabled = True
-            settings.preferred_chat_provider = "ollama"
-            settings.preferred_embedding_provider = "ollama"
-            logger.info("Forced provider selection to Ollama due to enablement")
+        # Apply provider selection from .env if specified
+        if hasattr(config, 'chat_provider') and config.chat_provider:
+            settings.preferred_chat_provider = config.chat_provider
+            logger.info(f"Applied .env chat provider override: {config.chat_provider}")
+        
+        if hasattr(config, 'embedding_provider') and config.embedding_provider:
+            settings.preferred_embedding_provider = config.embedding_provider
+            logger.info(f"Applied .env embedding provider override: {config.embedding_provider}")
         
         # Apply Langsmith enabled override from .env if admin hasn't explicitly enabled it
         if config.langfuse_enabled and not settings.langfuse_enabled:
@@ -217,32 +217,70 @@ class EnhancedSettingsManager:
         return settings
     
     def get_effective_chat_provider(self, settings: SystemSettings = None) -> str:
-        """Get effective chat provider considering both admin and .env settings"""
+        """Get effective chat provider respecting explicit provider selection"""
         from ..core.config import config
         
         if settings is None:
             settings = self._current_settings
         
-        # If Ollama is enabled in admin OR .env, use Ollama
-        if settings.ollama_enabled or config.ollama_enabled:
-            return "ollama"
+        # First check explicit provider selection from .env
+        if hasattr(config, 'chat_provider') and config.chat_provider:
+            if config.chat_provider == "ollama":
+                # Only use Ollama if it's actually enabled
+                if settings.ollama_enabled or config.ollama_enabled:
+                    return "ollama"
+                else:
+                    # Fallback to OpenAI if Ollama is disabled but requested
+                    return "openai"
+            else:
+                return config.chat_provider
         
-        # Otherwise use admin preference or .env fallback
-        return settings.preferred_chat_provider if settings.preferred_chat_provider != "openai" else config.chat_provider
+        # Fallback to admin preference if available
+        if hasattr(settings, 'preferred_chat_provider') and settings.preferred_chat_provider:
+            if settings.preferred_chat_provider == "ollama":
+                # Only use Ollama if it's actually enabled
+                if settings.ollama_enabled or config.ollama_enabled:
+                    return "ollama"
+                else:
+                    return "openai"
+            else:
+                return settings.preferred_chat_provider
+        
+        # Final fallback to OpenAI
+        return "openai"
     
     def get_effective_embedding_provider(self, settings: SystemSettings = None) -> str:
-        """Get effective embedding provider considering both admin and .env settings"""
+        """Get effective embedding provider respecting explicit provider selection"""
         from ..core.config import config
         
         if settings is None:
             settings = self._current_settings
         
-        # If Ollama is enabled in admin OR .env, use Ollama
-        if settings.ollama_enabled or config.ollama_enabled:
-            return "ollama"
+        # First check explicit provider selection from .env
+        if hasattr(config, 'embedding_provider') and config.embedding_provider:
+            if config.embedding_provider == "ollama":
+                # Only use Ollama if it's actually enabled
+                if settings.ollama_enabled or config.ollama_enabled:
+                    return "ollama"
+                else:
+                    # Fallback to OpenAI if Ollama is disabled but requested
+                    return "openai"
+            else:
+                return config.embedding_provider
         
-        # Otherwise use admin preference or .env fallback
-        return settings.preferred_embedding_provider if settings.preferred_embedding_provider != "openai" else config.embedding_provider
+        # Fallback to admin preference if available
+        if hasattr(settings, 'preferred_embedding_provider') and settings.preferred_embedding_provider:
+            if settings.preferred_embedding_provider == "ollama":
+                # Only use Ollama if it's actually enabled
+                if settings.ollama_enabled or config.ollama_enabled:
+                    return "ollama"
+                else:
+                    return "openai"
+            else:
+                return settings.preferred_embedding_provider
+        
+        # Final fallback to OpenAI
+        return "openai"
     
     def is_ollama_enabled_effective(self, settings: SystemSettings = None) -> bool:
         """Check if Ollama is effectively enabled (admin OR .env)"""

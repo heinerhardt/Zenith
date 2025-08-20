@@ -71,75 +71,413 @@ try:
 except:
     pass
 
-# Custom CSS
+# Custom CSS - Sercompe-inspired Design
 st.markdown("""
 <style>
-.main-header {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: #1f77b4;
+/* ===== GLOBAL STYLES - SERCOMPE INSPIRED ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Global color scheme */
+:root {
+    --sercompe-primary: #32373c;
+    --sercompe-secondary: #2c5282;
+    --sercompe-accent: #4299e1;
+    --sercompe-light: #f7fafc;
+    --sercompe-white: #ffffff;
+    --sercompe-gray-50: #f9fafb;
+    --sercompe-gray-100: #f3f4f6;
+    --sercompe-gray-200: #e5e7eb;
+    --sercompe-gray-300: #d1d5db;
+    --sercompe-gray-600: #6b7280;
+    --sercompe-gray-800: #1f2937;
+    --sercompe-blue-500: #3b82f6;
+    --sercompe-blue-600: #2563eb;
+    --sercompe-success: #10b981;
+    --sercompe-warning: #f59e0b;
+    --sercompe-error: #ef4444;
+    --sercompe-border-radius: 12px;
+    --sercompe-border-radius-lg: 16px;
+    --sercompe-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --sercompe-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Main container styling */
+.main .block-container {
+    padding-top: 2rem;
+    max-width: 1200px;
+}
+
+/* ===== TYPOGRAPHY HIERARCHY ===== */
+.sercompe-title {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--sercompe-primary);
     text-align: center;
     margin-bottom: 2rem;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+}
+
+.sercompe-subtitle {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--sercompe-primary);
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.02em;
+}
+
+.sercompe-heading {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--sercompe-primary);
+    margin: 1.5rem 0 1rem 0;
+    letter-spacing: -0.01em;
+}
+
+.sercompe-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--sercompe-gray-600);
+    line-height: 1.6;
+}
+
+/* ===== MODERN CARD COMPONENTS ===== */
+.sercompe-card {
+    background: var(--sercompe-white);
+    border-radius: var(--sercompe-border-radius);
+    border: 1px solid var(--sercompe-gray-200);
+    box-shadow: var(--sercompe-shadow);
+    padding: 1.5rem;
+    margin: 1rem 0;
+    transition: all 0.2s ease-in-out;
+}
+
+.sercompe-card:hover {
+    box-shadow: var(--sercompe-shadow-lg);
+    border-color: var(--sercompe-gray-300);
+    transform: translateY(-1px);
+}
+
+.sercompe-card-header {
+    border-bottom: 1px solid var(--sercompe-gray-200);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ===== STATUS CARDS ===== */
+.sercompe-info {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #93c5fd;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-blue-500);
+}
+
+.sercompe-success {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #86efac;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-success);
+}
+
+.sercompe-warning {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-warning);
+}
+
+.sercompe-error {
+    background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+    border: 1px solid #fca5a5;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-error);
+}
+
+/* ===== USER INFO PANEL ===== */
+.sercompe-user-panel {
+    background: linear-gradient(135deg, var(--sercompe-gray-50) 0%, var(--sercompe-white) 100%);
+    border: 1px solid var(--sercompe-gray-200);
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--sercompe-shadow);
+}
+
+.sercompe-user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sercompe-user-avatar {
+    width: 40px;
+    height: 40px;
+    background: var(--sercompe-blue-500);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: white;
+    font-size: 16px;
+}
+
+/* ===== MODERN BUTTONS ===== */
+.sercompe-btn {
+    border-radius: 9999px;
+    padding: 0.5rem 1.5rem;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease-in-out;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+}
+
+.sercompe-btn-primary {
+    background: linear-gradient(135deg, var(--sercompe-blue-500) 0%, var(--sercompe-blue-600) 100%);
+    color: white;
+    box-shadow: 0 4px 14px 0 rgb(59 130 246 / 0.35);
+}
+
+.sercompe-btn-primary:hover {
+    background: linear-gradient(135deg, var(--sercompe-blue-600) 0%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px 0 rgb(59 130 246 / 0.45);
+}
+
+.sercompe-btn-secondary {
+    background: var(--sercompe-white);
+    color: var(--sercompe-gray-600);
+    border: 1px solid var(--sercompe-gray-300);
+}
+
+.sercompe-btn-secondary:hover {
+    background: var(--sercompe-gray-50);
+    border-color: var(--sercompe-gray-400);
+    transform: translateY(-1px);
+}
+
+/* ===== CHAT INTERFACE ===== */
+.sercompe-chat-container {
+    background: var(--sercompe-white);
+    border-radius: var(--sercompe-border-radius-lg);
+    border: 1px solid var(--sercompe-gray-200);
+    box-shadow: var(--sercompe-shadow-lg);
+    overflow: hidden;
+    margin: 1rem 0;
+}
+
+.sercompe-chat-header {
+    background: linear-gradient(135deg, var(--sercompe-primary) 0%, #2d3748 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--sercompe-gray-200);
+}
+
+.sercompe-chat-messages {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--sercompe-gray-50);
+}
+
+.sercompe-message {
+    margin: 0.5rem 0;
+    padding: 1rem;
+    border-radius: var(--sercompe-border-radius);
+    max-width: 80%;
+}
+
+.sercompe-message-user {
+    background: linear-gradient(135deg, var(--sercompe-blue-500) 0%, var(--sercompe-blue-600) 100%);
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+.sercompe-message-assistant {
+    background: var(--sercompe-white);
+    color: var(--sercompe-primary);
+    border: 1px solid var(--sercompe-gray-200);
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+    box-shadow: var(--sercompe-shadow);
+}
+
+/* ===== FILE UPLOAD AREA ===== */
+.sercompe-upload-area {
+    border: 2px dashed var(--sercompe-gray-300);
+    border-radius: var(--sercompe-border-radius-lg);
+    padding: 3rem 2rem;
+    text-align: center;
+    background: linear-gradient(135deg, var(--sercompe-gray-50) 0%, var(--sercompe-white) 100%);
+    transition: all 0.2s ease-in-out;
+    margin: 1rem 0;
+}
+
+.sercompe-upload-area:hover {
+    border-color: var(--sercompe-blue-500);
+    background: linear-gradient(135deg, #eff6ff 0%, var(--sercompe-white) 100%);
+}
+
+.sercompe-upload-icon {
+    font-size: 48px;
+    color: var(--sercompe-gray-400);
+    margin-bottom: 1rem;
+}
+
+/* ===== SIDEBAR STYLING ===== */
+.css-1d391kg, .css-1rs6os, .css-17eq0hr {
+    background: linear-gradient(180deg, var(--sercompe-primary) 0%, #2d3748 100%);
+}
+
+section[data-testid="stSidebar"] > div {
+    background: linear-gradient(180deg, var(--sercompe-primary) 0%, #2d3748 100%);
+    color: white;
+}
+
+.css-1cypcdb {
+    background: transparent;
+}
+
+/* Sidebar text styling */
+section[data-testid="stSidebar"] .markdown-text-container,
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] li {
+    color: white !important;
+}
+
+section[data-testid="stSidebar"] .stMarkdown {
+    color: white;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+    .sercompe-title {
+        font-size: 28px;
+    }
+    
+    .sercompe-subtitle {
+        font-size: 24px;
+    }
+    
+    .sercompe-card {
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    
+    .sercompe-user-panel {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .sercompe-message {
+        max-width: 95%;
+    }
+}
+
+/* ===== LEGACY COMPATIBILITY ===== */
+.main-header {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--sercompe-primary);
+    text-align: center;
+    margin-bottom: 2rem;
+    letter-spacing: -0.025em;
 }
 
 .sub-header {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #333;
-    margin-top: 2rem;
-    margin-bottom: 1rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--sercompe-primary);
+    margin: 1.5rem 0 1rem 0;
 }
 
 .info-box {
-    background-color: #f0f8ff;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border-left: 4px solid #1f77b4;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #93c5fd;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
     margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-blue-500);
 }
 
 .success-box {
-    background-color: #f0fff0;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border-left: 4px solid #32cd32;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #86efac;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
     margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-success);
 }
 
 .error-box {
-    background-color: #fff0f0;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border-left: 4px solid #ff6b6b;
+    background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+    border: 1px solid #fca5a5;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
     margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-error);
 }
 
 .user-info {
-    background-color: #f8f9fa;
-    padding: 0.5rem 1rem;
-    border-radius: 0.25rem;
-    border: 1px solid #dee2e6;
+    background: linear-gradient(135deg, var(--sercompe-gray-50) 0%, var(--sercompe-white) 100%);
+    border: 1px solid var(--sercompe-gray-200);
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
     margin-bottom: 1rem;
+    box-shadow: var(--sercompe-shadow);
 }
 
 .admin-panel {
-    background-color: #fff3cd;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border-left: 4px solid #ffc107;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+    border-radius: var(--sercompe-border-radius);
+    padding: 1rem 1.5rem;
     margin: 1rem 0;
+    border-left: 4px solid var(--sercompe-warning);
 }
 
 .file-upload-area {
-    border: 2px dashed #ccc;
-    border-radius: 10px;
-    padding: 20px;
+    border: 2px dashed var(--sercompe-gray-300);
+    border-radius: var(--sercompe-border-radius-lg);
+    padding: 3rem 2rem;
     text-align: center;
-    background-color: #fafafa;
+    background: linear-gradient(135deg, var(--sercompe-gray-50) 0%, var(--sercompe-white) 100%);
+    transition: all 0.2s ease-in-out;
 }
 
-/* TARGETED NAVIGATION HIDING - PRESERVES SIDEBAR FUNCTIONALITY */
-/* Hide only page navigation, preserve sidebar */
+.file-upload-area:hover {
+    border-color: var(--sercompe-blue-500);
+    background: linear-gradient(135deg, #eff6ff 0%, var(--sercompe-white) 100%);
+}
+
+/* ===== NAVIGATION HIDING - PRESERVES SIDEBAR FUNCTIONALITY ===== */
 [data-testid="stSidebarNav"], 
 [data-testid="stSidebarNavItems"],
 .css-1544g2n,
@@ -147,7 +485,6 @@ st.markdown("""
     display: none !important;
 }
 
-/* Preserve sidebar container and content */
 [data-testid="stSidebar"] {
     display: block !important;
 }
@@ -156,9 +493,32 @@ section[data-testid="stSidebar"] {
     display: block !important;
 }
 
-/* Hide multipage navigation if it appears */
 .css-1kyxreq, .css-12oz5g7, .css-1v3fvcr, .css-1e5imcs {
     display: none !important;
+}
+
+/* ===== TAB STYLING ===== */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 1rem;
+    background: var(--sercompe-gray-50);
+    border-radius: var(--sercompe-border-radius);
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: calc(var(--sercompe-border-radius) - 2px);
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    background: transparent;
+    border: none;
+}
+
+.stTabs [aria-selected="true"] {
+    background: var(--sercompe-white);
+    color: var(--sercompe-primary);
+    box-shadow: var(--sercompe-shadow);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -244,8 +604,19 @@ class ZenithAuthenticatedApp:
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
-            st.markdown('<h1 class="main-header">📚 Zenith PDF Chatbot</h1>', unsafe_allow_html=True)
-            st.markdown('<p style="text-align: center; color: #666; margin-bottom: 2rem;">Secure Authentication Required</p>', unsafe_allow_html=True)
+            # Modern login card
+            st.markdown('''
+            <div class="sercompe-card" style="text-align: center;">
+                <h1 class="sercompe-title">📚 Zenith</h1>
+                <p class="sercompe-text" style="text-align: center; margin-bottom: 2rem; font-size: 16px;">
+                    Intelligent Document Chat System
+                </p>
+                <div class="sercompe-info" style="text-align: center;">
+                    <strong>Secure Authentication Required</strong><br>
+                    <small>Access your personalized document workspace</small>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
             
             # Create tabs for login and registration
             tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
@@ -399,21 +770,40 @@ class ZenithAuthenticatedApp:
         """Render user information header"""
         if st.session_state.get('authenticated') and st.session_state.get('user_info'):
             user_info = st.session_state.user_info
+            full_name = user_info.get("full_name") or user_info.get("username")
+            role = user_info.get("role", "").replace("_", " ").title()
             
-            col1, col2, col3 = st.columns([3, 1, 1])
+            # Modern user panel with avatar
+            st.markdown(f'''
+            <div class="sercompe-user-panel">
+                <div class="sercompe-user-info">
+                    <div class="sercompe-user-avatar">
+                        {full_name[0].upper() if full_name else "U"}
+                    </div>
+                    <div>
+                        <div style="font-weight: 600; color: var(--sercompe-primary);">
+                            {full_name}
+                        </div>
+                        <div class="sercompe-text" style="font-size: 12px;">
+                            {role}
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <!-- Buttons will be placed via Streamlit columns -->
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
             
-            with col1:
-                st.markdown(f'<div class="user-info">'
-                          f'👤 Welcome, {user_info.get("full_name") or user_info.get("username")} '
-                          f'({user_info.get("role", "").replace("_", " ").title()})'
-                          f'</div>', unsafe_allow_html=True)
+            # Action buttons in columns
+            col1, col2, col3 = st.columns([6, 1, 1])
             
             with col2:
-                if st.button("🚪 Logout"):
+                if st.button("🚪 Logout", key="logout_btn"):
                     self.logout_user()
             
             with col3:
-                if user_info.get("role") == "administrator" and st.button("⚙️ Admin"):
+                if user_info.get("role") == "administrator" and st.button("⚙️ Admin", key="admin_btn"):
                     st.session_state.show_admin_panel = True
                     st.rerun()
     
@@ -432,7 +822,15 @@ class ZenithAuthenticatedApp:
     
     def render_chat_interface(self):
         """Render the main chat interface"""
-        st.markdown('<h1 class="main-header">📚 Zenith PDF Chatbot</h1>', unsafe_allow_html=True)
+        # Modern header with Sercompe styling
+        st.markdown('''
+        <div class="sercompe-card" style="text-align: center; margin-bottom: 2rem;">
+            <h1 class="sercompe-title">📚 Zenith</h1>
+            <p class="sercompe-text" style="text-align: center; font-size: 16px;">
+                Intelligent Document Chat System
+            </p>
+        </div>
+        ''', unsafe_allow_html=True)
         
         # Initialize user components if needed
         if not st.session_state.vector_store:
@@ -793,11 +1191,22 @@ class ZenithAuthenticatedApp:
     
     def render_file_upload_interface(self):
         """Render file upload interface for chat users"""
-        st.markdown("### Upload Your PDF Documents")
+        st.markdown('<h3 class="sercompe-heading">📁 Upload Your PDF Documents</h3>', unsafe_allow_html=True)
         
-        # File upload with drag and drop
-        st.markdown('<div class="file-upload-area">', unsafe_allow_html=True)
-        st.markdown("#### Drag and Drop PDF Files")
+        # Modern file upload card
+        st.markdown('''
+        <div class="sercompe-card">
+            <div class="sercompe-upload-area">
+                <div class="sercompe-upload-icon">📄</div>
+                <div class="sercompe-heading" style="margin: 1rem 0 0.5rem 0;">
+                    Drag & Drop PDF Files
+                </div>
+                <p class="sercompe-text" style="margin-bottom: 1.5rem;">
+                    Upload one or multiple PDF documents to chat with your content
+                </p>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
         
         uploaded_files = st.file_uploader(
             "Choose PDF files",
@@ -806,19 +1215,41 @@ class ZenithAuthenticatedApp:
             help="Upload one or more PDF files to analyze",
             label_visibility="collapsed"
         )
-        st.markdown('</div>', unsafe_allow_html=True)
         
         if uploaded_files:
-            st.markdown("**Uploaded Files:**")
+            # Modern file display with cards
+            st.markdown('''
+            <div class="sercompe-card">
+                <div class="sercompe-card-header">
+                    <h4 class="sercompe-heading" style="margin: 0;">📄 Uploaded Files</h4>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+            
             total_size = 0
             
             for file in uploaded_files:
                 file_size = len(file.read())
                 file.seek(0)  # Reset file pointer
                 total_size += file_size
-                st.markdown(f"- {file.name} ({format_file_size(file_size)})")
+                
+                st.markdown(f'''
+                <div class="sercompe-info" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>📄 {file.name}</strong>
+                    </div>
+                    <div class="sercompe-text">
+                        {format_file_size(file_size)}
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
             
-            st.markdown(f"**Total Size:** {format_file_size(total_size)}")
+            st.markdown(f'''
+            <div class="sercompe-success" style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>Total Size: {format_file_size(total_size)}</strong>
+                <span class="sercompe-text">Ready to process</span>
+            </div>
+            ''', unsafe_allow_html=True)
             
             # Process files button
             if st.button("🚀 Process Documents", type="primary"):
@@ -1092,23 +1523,55 @@ class ZenithAuthenticatedApp:
                         st.error(f"Error starting new chat: {str(e)}")
     
     def display_chat_history(self):
-        """Display the chat history"""
-        for message in st.session_state.chat_history:
+        """Display the chat history with modern Sercompe styling"""
+        # Chat container with modern styling
+        st.markdown('<div class="sercompe-chat-container">', unsafe_allow_html=True)
+        
+        for i, message in enumerate(st.session_state.chat_history):
             if message["role"] == "user":
-                with st.chat_message("user"):
-                    st.markdown(message["content"])
+                # User message with modern styling
+                st.markdown(f'''
+                <div class="sercompe-message sercompe-message-user" style="margin-left: auto; max-width: 80%;">
+                    <div style="font-weight: 500; margin-bottom: 0.5rem; font-size: 14px; opacity: 0.9;">
+                        You
+                    </div>
+                    <div style="line-height: 1.6;">
+                        {message["content"]}
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
             
             elif message["role"] == "assistant":
-                with st.chat_message("assistant"):
-                    st.markdown(message["content"])
-                    
-                    # Show sources if available
-                    if message.get("sources") and len(message["sources"]) > 0:
-                        with st.expander(f"📚 View Sources ({len(message['sources'])} documents)"):
-                            for i, source in enumerate(message["sources"]):
-                                st.markdown(f"**Source {i+1}:** {source.get('filename', 'Unknown')}")
-                                st.markdown(f"*Content:* {source.get('content', '')}")
-                                st.markdown("---")
+                # Assistant message with modern styling
+                st.markdown(f'''
+                <div class="sercompe-message sercompe-message-assistant" style="margin-right: auto; max-width: 80%;">
+                    <div style="font-weight: 500; margin-bottom: 0.5rem; font-size: 14px; color: var(--sercompe-blue-500);">
+                        🤖 Zenith Assistant
+                    </div>
+                    <div style="line-height: 1.6;">
+                        {message["content"]}
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
+                
+                # Show sources if available with modern expandable card
+                if message.get("sources") and len(message["sources"]) > 0:
+                    with st.expander(f"📚 View Sources ({len(message['sources'])} documents)", expanded=False):
+                        st.markdown('<div class="sercompe-card">', unsafe_allow_html=True)
+                        for i, source in enumerate(message["sources"]):
+                            st.markdown(f'''
+                            <div class="sercompe-info" style="margin: 0.5rem 0;">
+                                <div class="sercompe-heading" style="margin: 0 0 0.5rem 0; font-size: 14px;">
+                                    📄 Source {i+1}: {source.get('filename', 'Unknown')}
+                                </div>
+                                <div class="sercompe-text" style="font-style: italic;">
+                                    {source.get('content', '')[:200]}{'...' if len(source.get('content', '')) > 200 else ''}
+                                </div>
+                            </div>
+                            ''', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     def handle_user_input(self, user_input: str, use_rag: bool, filter_user_only: bool = True):
         """Handle user input and generate response - UPDATED VERSION with user filter"""
