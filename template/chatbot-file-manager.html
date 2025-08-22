@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot File Manager - Centered Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #001F3F;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header with Navigation and Logo */
+        .header {
+            background: #000E1A;
+            border-bottom: 1px solid #D3D3D3;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 100;
+        }
+
+        .logo-nav {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo h1 {
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo-icon {
+            font-size: 24px;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-items {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-item {
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-item:hover {
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            border: 1px solid #D3D3D3;
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            border: 1px solid #D3D3D3;
+            font-weight: bold;
+        }
+
+        .header-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-tab {
+            padding: 10px 16px;
+            background: transparent;
+            border: 1px solid #D3D3D3;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .header-tab.active {
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            color: white;
+            font-weight: bold;
+        }
+
+        .user-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .admin-btn {
+            padding: 8px 12px;
+            background: rgba(60, 180, 231, 0.1);
+            border: 1px solid #D3D3D3;
+            border-radius: 6px;
+            color: #7AD9FD;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .admin-btn:hover {
+            background: rgba(60, 180, 231, 0.2);
+        }
+
+        .admin-btn.active {
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            color: white;
+            font-weight: bold;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Centered Chat Area */
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(0, 14, 26, 0.3);
+            border: 1px solid #D3D3D3;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #000E1A;
+            padding: 15px 20px;
+            border-bottom: 1px solid #D3D3D3;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+
+        .chat-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #7AD9FD;
+        }
+
+        .chat-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #7AD9FD;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #7AD9FD;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #001F3F;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin: 0 10px;
+            font-size: 14px;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 15px 18px;
+            border-radius: 18px;
+            border: 1px solid #D3D3D3;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .message.bot .message-bubble {
+            background: linear-gradient(135deg, rgba(60, 180, 231, 0.15), rgba(122, 217, 253, 0.15));
+            border-top-left-radius: 6px;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            border-top-right-radius: 6px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .chat-input-area {
+            padding: 20px;
+            background: #000E1A;
+            border-top: 1px solid #D3D3D3;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 15px;
+            background: rgba(0, 31, 63, 0.5);
+            border-radius: 12px;
+            border: 1px solid #D3D3D3;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 15px;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .input-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(60, 180, 231, 0.4);
+        }
+
+        /* Sessions Sidebar */
+        .sessions-sidebar {
+            width: 280px;
+            background: #000E1A;
+            border-left: 1px solid #D3D3D3;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #D3D3D3;
+            background: rgba(0, 31, 63, 0.5);
+        }
+
+        .sidebar-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #7AD9FD;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .sessions-list {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .session-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            background: rgba(60, 180, 231, 0.08);
+            border-radius: 10px;
+            border: 1px solid #D3D3D3;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .session-item:hover {
+            background: rgba(60, 180, 231, 0.15);
+            transform: translateX(-2px);
+        }
+
+        .session-item.active {
+            background: linear-gradient(135deg, rgba(60, 180, 231, 0.2), rgba(122, 217, 253, 0.2));
+            border-color: #7AD9FD;
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .session-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .session-time {
+            font-size: 11px;
+            color: #7AD9FD;
+            opacity: 0.8;
+        }
+
+        .session-preview {
+            font-size: 12px;
+            opacity: 0.7;
+            line-height: 1.3;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .session-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #7AD9FD;
+        }
+
+        .new-session-btn {
+            margin: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .new-session-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(60, 180, 231, 0.4);
+        }
+
+        /* Upload Area (hidden by default) */
+        .upload-area {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            border: 2px dashed #3CB4E7;
+            border-radius: 15px;
+            margin: 20px;
+            background: rgba(60, 180, 231, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .upload-area.active {
+            display: flex;
+        }
+
+        .upload-area.drag-over {
+            border-color: #7AD9FD;
+            background: rgba(60, 180, 231, 0.1);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #3CB4E7;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 16px;
+            color: #7AD9FD;
+            margin-bottom: 8px;
+        }
+
+        .upload-subtitle {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .sessions-sidebar {
+                width: 250px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .sessions-sidebar {
+                width: 100%;
+                height: 200px;
+                border-left: none;
+                border-top: 1px solid #D3D3D3;
+                order: 2;
+            }
+
+            .nav-items {
+                display: none;
+            }
+
+            .admin-controls {
+                display: none;
+            }
+
+            .logo-nav {
+                gap: 15px;
+            }
+        }
+
+        /* Animations */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #7AD9FD;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #3CB4E7, #7AD9FD);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            border: 1px solid #D3D3D3;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            font-size: 14px;
+        }
+
+        .notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with Logo and Navigation -->
+        <header class="header">
+            <div class="logo-nav">
+                <div class="logo">
+                    <div class="logo-icon">🤖</div>
+                    <h1>File Manager AI</h1>
+                </div>
+                
+                <nav class="nav-items">
+                    <div class="nav-item active" data-nav="home">
+                        <span>🏠</span>
+                        <span>Home</span>
+                    </div>
+                    <div class="nav-item" data-nav="chat">
+                        <span>💬</span>
+                        <span>Chat</span>
+                    </div>
+                    <div class="nav-item" data-nav="files">
+                        <span>📁</span>
+                        <span>Files</span>
+                    </div>
+                    <div class="nav-item" data-nav="settings">
+                        <span>⚙️</span>
+                        <span>Settings</span>
+                    </div>
+                </nav>
+            </div>
+
+            <div class="header-tabs">
+                <div class="header-tab active" data-tab="chat">Chat</div>
+                <div class="header-tab" data-tab="upload">Upload</div>
+            </div>
+
+            <div class="user-section">
+                <div class="admin-controls">
+                    <div class="admin-btn active" data-admin="system">System</div>
+                    <div class="admin-btn" data-admin="models">AI Models</div>
+                    <div class="admin-btn" data-admin="storage">Storage</div>
+                    <div class="admin-btn" data-admin="analytics">Analytics</div>
+                </div>
+                
+                <div class="user-avatar" onclick="showNotification('User menu opened')">JD</div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Centered Chat Section -->
+            <div class="chat-section">
+                <!-- Chat View -->
+                <div class="chat-container" id="chatView">
+                    <div class="chat-header">
+                        <div class="chat-title">AI File Manager Assistant</div>
+                        <div class="chat-status">
+                            <div class="status-dot"></div>
+                            <span>Online</span>
+                        </div>
+                    </div>
+
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message bot">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-bubble">
+                                Welcome to File Manager AI! I'm here to help you organize, search, and manage your documents efficiently. What can I help you with today?
+                            </div>
+                        </div>
+                        
+                        <div class="message user">
+                            <div class="message-bubble">
+                                Can you show me all my PDF files from last week?
+                            </div>
+                            <div class="message-avatar">JD</div>
+                        </div>
+                        
+                        <div class="message bot">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-bubble">
+                                I found 6 PDF files from last week. Here they are organized by category:<br><br>
+                                📊 <strong>Reports (3 files)</strong><br>
+                                • Project_Status_Report.pdf<br>
+                                • Weekly_Analytics.pdf<br>
+                                • Budget_Summary.pdf<br><br>
+                                📄 <strong>Documents (2 files)</strong><br>
+                                • Contract_Review.pdf<br>
+                                • Meeting_Minutes.pdf<br><br>
+                                📋 <strong>Forms (1 file)</strong><br>
+                                • Expense_Report.pdf<br><br>
+                                Would you like me to perform any actions on these files?
+                            </div>
+                        </div>
+
+                        <div class="message user">
+                            <div class="message-bubble">
+                                Yes, please organize them into folders by category
+                            </div>
+                            <div class="message-avatar">JD</div>
+                        </div>
+
+                        <div class="message bot">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-bubble">
+                                Perfect! I've successfully organized your PDF files:<br><br>
+                                ✅ Created folder: <strong>/Reports</strong> (3 files moved)<br>
+                                ✅ Created folder: <strong>/Documents</strong> (2 files moved)<br>
+                                ✅ Created folder: <strong>/Forms</strong> (1 file moved)<br><br>
+                                All files have been organized and are now easily accessible in their respective categories. Is there anything else you'd like me to help you with?
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="chat-input-container">
+                            <input type="text" class="chat-input" id="chatInput" placeholder="Ask me to organize, search, or manage your files...">
+                            <div class="input-actions">
+                                <button class="action-btn" onclick="triggerFileUpload()">
+                                    <span>📎</span>
+                                    <span>Upload</span>
+                                </button>
+                                <button class="action-btn" onclick="sendMessage()">
+                                    <span>Send</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Area (hidden by default) -->
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <div class="upload-text">Drop files here to upload</div>
+                    <div class="upload-subtitle">Supports PDF, DOC, DOCX, TXT, Images (Max 50MB)</div>
+                </div>
+            </div>
+
+            <!-- Sessions Sidebar -->
+            <div class="sessions-sidebar">
+                <div class="sidebar-header">
+                    <div class="sidebar-title">Recent Sessions</div>
+                    <div class="sidebar-subtitle">Last 5 conversations</div>
+                </div>
+
+                <div class="sessions-list">
+                    <div class="session-item active" data-session="1">
+                        <div class="session-header">
+                            <div class="session-title">PDF Organization Project</div>
+                            <div class="session-time">2h ago</div>
+                        </div>
+                        <div class="session-preview">Organized 6 PDF files into Reports, Documents, and Forms categories...</div>
+                        <div class="session-stats">
+                            <span>6 files</span>
+                            <span>3 folders</span>
+                        </div>
+                    </div>
+
+                    <div class="session-item" data-session="2">
+                        <div class="session-header">
+                            <div class="session-title">Document Search & Analysis</div>
+                            <div class="session-time">1d ago</div>
+                        </div>
+                        <div class="session-preview">Searched through 45 documents for budget-related content and created summary report...</div>
+                        <div class="session-stats">
+                            <span>45 files</span>
+                            <span>12 matches</span>
+                        </div>
+                    </div>
+
+                    <div class="session-item" data-session="3">
+                        <div class="session-header">
+                            <div class="session-title">Backup & Cloud Sync</div>
+                            <div class="session-time">3d ago</div>
+                        </div>
+                        <div class="session-preview">Performed full backup of documents folder and synced with cloud storage...</div>
+                        <div class="session-stats">
+                            <span>127 files</span>
+                            <span>2.3 GB</span>
+                        </div>
+                    </div>
+
+                    <div class="session-item" data-session="4">
+                        <div class="session-header">
+                            <div class="session-title">Image Classification</div>
+                            <div class="session-time">5d ago</div>
+                        </div>
+                        <div class="session-preview">Automatically sorted 89 images by date and content type into organized folders...</div>
+                        <div class="session-stats">
+                            <span>89 images</span>
+                            <span>8 folders</span>
+                        </div>
+                    </div>
+
+                    <div class="session-item" data-session="5">
+                        <div class="session-header">
+                            <div class="session-title">Duplicate File Cleanup</div>
+                            <div class="session-time">1w ago</div>
+                        </div>
+                        <div class="session-preview">Found and removed 23 duplicate files, freeing up 456 MB of storage space...</div>
+                        <div class="session-stats">
+                            <span>23 duplicates</span>
+                            <span>456 MB saved</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="new-session-btn" onclick="startNewSession()">
+                    <span>➕</span>
+                    <span>New Session</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="fileInput" multiple style="display: none;" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xlsx,.xls">
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // Global variables
+        let isTyping = false;
+        let currentSession = 1;
+
+        // Navigation functionality
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                const navType = this.dataset.nav;
+                showNotification(`Navigated to ${navType.charAt(0).toUpperCase() + navType.slice(1)}`);
+            });
+        });
+
+        // Header tab switching
+        document.querySelectorAll('.header-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                
+                const tabType = this.dataset.tab;
+                const chatView = document.getElementById('chatView');
+                const uploadArea = document.getElementById('uploadArea');
+                
+                if (tabType === 'upload') {
+                    chatView.style.display = 'none';
+                    uploadArea.classList.add('active');
+                } else {
+                    chatView.style.display = 'flex';
+                    uploadArea.classList.remove('active');
+                }
+                
+                showNotification(`Switched to ${tabType} mode`);
+            });
+        });
+
+        // Admin controls functionality
+        document.querySelectorAll('.admin-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.admin-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                const adminType = this.dataset.admin;
+                showNotification(`Admin: ${adminType.charAt(0).toUpperCase() + adminType.slice(1)} panel active`);
+            });
+        });
+
+        // Session management
+        document.querySelectorAll('.session-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.session-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                const sessionId = this.dataset.session;
+                currentSession = sessionId;
+                showNotification(`Loaded session ${sessionId}`);
+                
+                // Simulate loading session content
+                setTimeout(() => {
+                    showNotification('Session content loaded successfully!');
+                }, 1000);
+            });
+        });
+
+        function startNewSession() {
+            // Clear current chat
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="message bot">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-bubble">
+                        Hello! I'm starting a new session. How can I help you manage your files today?
+                    </div>
+                </div>
+            `;
+            
+            // Remove active session
+            document.querySelectorAll('.session-item').forEach(i => i.classList.remove('active'));
+            
+            showNotification('New session started!');
+        }
+
+        // Chat functionality
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                addMessage(message, 'user');
+                input.value = '';
+                
+                // Simulate bot response
+                setTimeout(() => {
+                    showTypingIndicator();
+                    setTimeout(() => {
+                        hideTypingIndicator();
+                        addBotResponse(message);
+                    }, 1500);
+                }, 500);
+            }
+        }
+
+        function addMessage(text, sender) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="message-bubble">${text}</div>
+                    <div class="message-avatar">JD</div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-bubble">${text}</div>
+                `;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addBotResponse(userMessage) {
+            let response = '';
+            
+            if (userMessage.toLowerCase().includes('help')) {
+                response = "I can help you with:<br><br>📁 <strong>File Organization:</strong> Sort and categorize your documents<br>🔍 <strong>Smart Search:</strong> Find files by content, type, or date<br>📤 <strong>Upload Management:</strong> Handle new file uploads<br>📊 <strong>Analytics:</strong> View storage and usage statistics<br>🔄 <strong>Backup & Sync:</strong> Protect and synchronize your files<br><br>What would you like me to help you with?";
+            } else if (userMessage.toLowerCase().includes('search')) {
+                response = "I can search your files using various criteria:<br><br>🔍 <strong>Search Options:</strong><br>• File type (PDF, DOC, images, etc.)<br>• Date range (today, last week, custom)<br>• File name keywords<br>• Content within documents<br>• File size and properties<br>• Location and folder structure<br><br>What specific files are you looking for?";
+            } else if (userMessage.toLowerCase().includes('backup')) {
+                response = "Backup and synchronization services available:<br><br>🔄 <strong>Backup Options:</strong><br>• Create instant backup<br>• Schedule automatic backups<br>• Restore from previous backups<br>• Cloud storage integration<br>• Version history management<br><br>☁️ <strong>Sync Services:</strong><br>• Real-time cloud sync<br>• Cross-device synchronization<br>• Conflict resolution<br><br>Which backup operation would you like to perform?";
+            } else if (userMessage.toLowerCase().includes('organize')) {
+                response = "I can organize your files in multiple ways:<br><br>📁 <strong>Organization Methods:</strong><br>• By file type (documents, images, videos)<br>• By date (daily, weekly, monthly folders)<br>• By project or category<br>• By file size or importance<br>• Custom folder structures<br><br>📊 <strong>Smart Features:</strong><br>• Automatic duplicate detection<br>• Intelligent file naming<br>• Bulk operations<br><br>How would you like me to organize your files?";
+            } else if (userMessage.toLowerCase().includes('upload')) {
+                response = "File upload options:<br><br>📤 <strong>Upload Methods:</strong><br>• Drag and drop files<br>• Browse and select files<br>• Bulk folder uploads<br>• Cloud import from other services<br><br>📋 <strong>Supported Formats:</strong><br>• Documents: PDF, DOC, DOCX, TXT, RTF<br>• Spreadsheets: XLS, XLSX, CSV<br>• Images: JPG, PNG, GIF, BMP, SVG<br>• Archives: ZIP, RAR, 7Z<br><br>Maximum file size: 50MB per file. Ready to upload?";
+            } else {
+                response = "I'm ready to help you manage your files efficiently! Here are some things I can do:<br><br>💬 <strong>Try asking me:</strong><br>• \"Show me all PDF files from this month\"<br>• \"Organize my documents by project\"<br>• \"Search for files containing 'budget'\"<br>• \"Create a backup of my important files\"<br>• \"Help me clean up duplicate files\"<br><br>What file management task can I assist you with today?";
+            }
+            
+            addMessage(response, 'bot');
+        }
+
+        function showTypingIndicator() {
+            if (!isTyping) {
+                isTyping = true;
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'message bot typing-indicator';
+                typingDiv.innerHTML = `
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-bubble">
+                        <div class="loading"></div>
+                        AI is processing your request...
+                    </div>
+                `;
+                
+                document.getElementById('chatMessages').appendChild(typingDiv);
+                document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+            }
+        }
+
+        function hideTypingIndicator() {
+            const typingIndicator = document.querySelector('.typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+                isTyping = false;
+            }
+        }
+
+        // Enter key to send message
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // File upload functionality
+        function triggerFileUpload() {
+            document.getElementById('fileInput').click();
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                let fileList = '';
+                let totalSize = 0;
+                
+                for (let i = 0; i < files.length; i++) {
+                    fileList += `📄 ${files[i].name} (${formatFileSize(files[i].size)})<br>`;
+                    totalSize += files[i].size;
+                }
+                
+                showNotification(`${files.length} file(s) uploaded successfully!`);
+                
+                // Switch to chat view if currently in upload view
+                const chatTab = document.querySelector('.header-tab[data-tab="chat"]');
+                if (chatTab && !chatTab.classList.contains('active')) {
+                    chatTab.click();
+                }
+                
+                // Add upload confirmation to chat
+                setTimeout(() => {
+                    addMessage(`✅ <strong>Upload Complete!</strong><br><br><strong>Files uploaded:</strong><br>${fileList}<br><strong>Total size:</strong> ${formatFileSize(totalSize)}<br><br>Files are now available in your document library. What would you like me to do with them?`, 'bot');
+                }, 500);
+            }
+        });
+
+        // Drag and drop functionality for upload area
+        const uploadArea = document.getElementById('uploadArea');
+
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                let fileList = '';
+                let totalSize = 0;
+                
+                for (let i = 0; i < files.length; i++) {
+                    fileList += `📄 ${files[i].name} (${formatFileSize(files[i].size)})<br>`;
+                    totalSize += files[i].size;
+                }
+                
+                showNotification(`${files.length} file(s) uploaded via drag & drop!`);
+                
+                // Switch back to chat tab and add confirmation
+                document.querySelector('.header-tab[data-tab="chat"]').click();
+                setTimeout(() => {
+                    addMessage(`✅ <strong>Drag & Drop Upload Complete!</strong><br><br><strong>Files uploaded:</strong><br>${fileList}<br><strong>Total size:</strong> ${formatFileSize(totalSize)}<br><br>All files have been successfully added to your library. How would you like me to organize them?`, 'bot');
+                }, 500);
+            }
+        });
+
+        // Utility functions
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            showNotification('Welcome to File Manager AI! Ready to help you organize your files.');
+            
+            // Auto-scroll chat to bottom on load
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+
+        // Add some interactive features for demo
+        setTimeout(() => {
+            showNotification('💡 Tip: Try asking me to "organize my files" or "search for documents"');
+        }, 5000);
+
+        // Simulate real-time file processing updates
+        setInterval(() => {
+            const statusDot = document.querySelector('.status-dot');
+            if (statusDot) {
+                statusDot.style.background = Math.random() > 0.5 ? '#7AD9FD' : '#3CB4E7';
+            }
+        }, 3000);
+    </script>
+</body>
+</html>
