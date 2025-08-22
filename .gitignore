@@ -140,3 +140,6 @@ yarn-error.log*
 claude_config.json
 .claude/*
 CLAUDE.md
+
+#Playwright
+.playwright-mcp/*
