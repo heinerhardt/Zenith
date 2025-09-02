@@ -146,3 +146,6 @@ CLAUDE.md
 
 #Context
 context/*
+
+#Chatbot Template
+chatbox-webapp/
