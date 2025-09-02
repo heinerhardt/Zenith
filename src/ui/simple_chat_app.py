@@ -1123,7 +1123,7 @@ def render_system_settings_page():
     try:
         # Load current settings
         settings_manager = get_enhanced_settings_manager()
-        current_settings = settings_manager.get_system_settings()
+        current_settings = settings_manager.get_settings()
         
         # AI Provider Settings
         st.markdown("#### 🤖 AI Provider Configuration")
@@ -1272,29 +1272,32 @@ def render_system_settings_page():
         with col2:
             if st.button("💾 Save Settings", use_container_width=True):
                 try:
-                    # Update settings
-                    updated_settings = SystemSettings(
-                        openai_api_key=openai_api_key if openai_enabled else None,
-                        openai_chat_model=openai_chat_model if openai_enabled else current_settings.openai_chat_model,
-                        openai_embedding_model=openai_embedding_model if openai_enabled else current_settings.openai_embedding_model,
-                        ollama_enabled=ollama_enabled,
-                        ollama_endpoint=ollama_endpoint if ollama_enabled else current_settings.ollama_endpoint,
-                        ollama_chat_model=ollama_chat_model if ollama_enabled else current_settings.ollama_chat_model,
-                        ollama_embedding_model=ollama_embedding_model if ollama_enabled else current_settings.ollama_embedding_model,
-                        preferred_chat_provider=preferred_chat_provider,
-                        preferred_embedding_provider=preferred_embedding_provider,
-                        chunk_size=chunk_size,
-                        chunk_overlap=chunk_overlap,
-                        max_file_size_mb=max_file_size,
-                        allow_user_registration=allow_registration,
-                        max_users=max_users,
-                        session_duration_hours=session_duration,
-                        updated_at=datetime.now()
-                    )
+                    # Prepare updates dictionary
+                    updates = {
+                        "openai_api_key": openai_api_key if openai_enabled else None,
+                        "openai_chat_model": openai_chat_model if openai_enabled else current_settings.openai_chat_model,
+                        "openai_embedding_model": openai_embedding_model if openai_enabled else current_settings.openai_embedding_model,
+                        "ollama_enabled": ollama_enabled,
+                        "ollama_endpoint": ollama_endpoint if ollama_enabled else current_settings.ollama_endpoint,
+                        "ollama_chat_model": ollama_chat_model if ollama_enabled else current_settings.ollama_chat_model,
+                        "ollama_embedding_model": ollama_embedding_model if ollama_enabled else current_settings.ollama_embedding_model,
+                        "preferred_chat_provider": preferred_chat_provider,
+                        "preferred_embedding_provider": preferred_embedding_provider,
+                        "chunk_size": chunk_size,
+                        "chunk_overlap": chunk_overlap,
+                        "max_file_size_mb": max_file_size,
+                        "allow_user_registration": allow_registration,
+                        "max_users": max_users,
+                        "session_duration_hours": session_duration,
+                        "updated_at": datetime.now()
+                    }
                     
-                    # Save settings
-                    settings_manager.save_system_settings(updated_settings)
-                    st.success("✅ Settings saved successfully!")
+                    # Save settings using update_settings method
+                    success, message = settings_manager.update_settings(updates)
+                    if success:
+                        st.success("✅ Settings saved successfully!")
+                    else:
+                        st.error(f"Failed to save settings: {message}")
                     
                 except Exception as e:
                     logger.error(f"Error saving settings: {e}")
