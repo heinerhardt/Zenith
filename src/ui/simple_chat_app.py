@@ -1239,15 +1239,18 @@ def render_system_settings_page():
         
         # System Configuration
         st.markdown("#### ⚙️ System Configuration")
+        
+        # Allow User Registration checkbox (full width)
+        allow_registration = st.checkbox(
+            "Allow User Registration",
+            value=current_settings.allow_user_registration,
+            help="Allow new users to register accounts"
+        )
+        
+        # Aligned columns for numeric inputs
         col1, col2 = st.columns(2)
         
         with col1:
-            allow_registration = st.checkbox(
-                "Allow User Registration",
-                value=current_settings.allow_user_registration,
-                help="Allow new users to register accounts"
-            )
-            
             max_users = st.number_input(
                 "Maximum Users",
                 min_value=1,
