@@ -1,7 +1,7 @@
 ---
 task: m-fix-system-settings-error
 branch: fix/system-settings-error
-status: pending
+status: in-progress
 created: 2025-01-26
 modules: [ui, core, settings]
 ---
