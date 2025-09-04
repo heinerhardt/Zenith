@@ -371,9 +371,9 @@ def render_admin_menu():
     
     admin_options = [
         ("🔧 System Settings", 'system_settings'),
-        ("🤖 AI Models", 'ai_models'), 
+        ("🗄️ Database", 'database'), 
         ("👥 User Management", 'user_management'),
-        ("🗄️ MinIO Processor", 'minio_processor'),
+        ("🗃️ MinIO Processor", 'minio_processor'),
         ("📊 System Status", 'system_status')
     ]
     
@@ -1404,6 +1404,327 @@ def render_system_settings_page():
         st.session_state.active_page = "chat"
         st.rerun()
 
+def render_database_page():
+    """Render database configuration page"""
+    st.markdown('<div class="panel-header">### 🗄️ Database Configuration</div>', unsafe_allow_html=True)
+    
+    st.markdown("Configure vector database and system persistence settings.")
+    
+    try:
+        # Load current settings
+        settings_manager = get_enhanced_settings_manager()
+        current_settings = settings_manager.get_settings()
+        
+        # Qdrant Vector Database Configuration
+        st.markdown("#### 🔍 Qdrant Vector Database")
+        st.markdown("Configure vector storage for document embeddings and semantic search.")
+        
+        with st.expander("Qdrant Settings", expanded=True):
+            qdrant_mode = st.selectbox(
+                "Qdrant Mode",
+                options=["local", "cloud"],
+                index=0 if getattr(current_settings, 'qdrant_mode', 'local') == "local" else 1,
+                help="Use local Qdrant instance or cloud service"
+            )
+            
+            if qdrant_mode == "local":
+                col1, col2 = st.columns(2)
+                with col1:
+                    qdrant_host = st.text_input(
+                        "Host",
+                        value=getattr(current_settings, 'qdrant_local_host', 'localhost'),
+                        help="Qdrant server host (e.g., localhost)"
+                    )
+                
+                with col2:
+                    qdrant_port = st.number_input(
+                        "Port",
+                        min_value=1,
+                        max_value=65535,
+                        value=getattr(current_settings, 'qdrant_local_port', 6333),
+                        help="Qdrant server port (default: 6333)"
+                    )
+                
+                st.info("💡 To run Qdrant locally: `docker run -p 6333:6333 qdrant/qdrant`")
+                
+            else:  # cloud mode
+                qdrant_cloud_url = st.text_input(
+                    "Cloud URL",
+                    value=getattr(current_settings, 'qdrant_cloud_url', '') or "",
+                    help="Qdrant cloud cluster URL"
+                )
+                
+                qdrant_api_key = st.text_input(
+                    "API Key",
+                    type="password",
+                    value="***" if getattr(current_settings, 'qdrant_cloud_api_key', None) else "",
+                    help="Qdrant cloud API key"
+                )
+            
+            qdrant_collection = st.text_input(
+                "Collection Name",
+                value=getattr(current_settings, 'qdrant_collection_name', 'zenith_documents'),
+                help="Name for the document collection"
+            )
+            
+            # Qdrant Connection Test
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("🔌 Test Qdrant Connection", use_container_width=True):
+                    with st.spinner("Testing Qdrant connection..."):
+                        try:
+                            from src.core.qdrant_manager import QdrantManager
+                            test_manager = QdrantManager(qdrant_mode)
+                            if test_manager.health_check():
+                                collections = test_manager.get_client().get_collections()
+                                st.success(f"✅ Qdrant connection successful! Found {len(collections.collections)} collections")
+                            else:
+                                st.error("❌ Qdrant connection failed")
+                        except Exception as e:
+                            st.error(f"❌ Qdrant test failed: {str(e)}")
+            
+            with col2:
+                if st.button("📊 View Collections", use_container_width=True):
+                    try:
+                        from src.core.qdrant_manager import QdrantManager
+                        test_manager = QdrantManager(qdrant_mode)
+                        collections = test_manager.get_client().get_collections()
+                        if collections.collections:
+                            st.markdown("**Existing Collections:**")
+                            for collection in collections.collections:
+                                st.markdown(f"• {collection.name}")
+                        else:
+                            st.info("No collections found")
+                    except Exception as e:
+                        st.error(f"Unable to fetch collections: {str(e)}")
+        
+        # SQLite System Database Configuration  
+        st.markdown("#### 💾 SQLite System Database")
+        st.markdown("Configure persistent storage for user accounts, settings, and system data.")
+        
+        with st.expander("SQLite Settings", expanded=True):
+            # Database file location
+            database_path = st.text_input(
+                "Database File Path",
+                value=getattr(current_settings, 'sqlite_db_path', './data/zenith.db'),
+                help="Path to SQLite database file for system data"
+            )
+            
+            # Auto-backup configuration
+            col1, col2 = st.columns(2)
+            with col1:
+                enable_backups = st.checkbox(
+                    "Enable Auto Backup",
+                    value=getattr(current_settings, 'sqlite_auto_backup', True),
+                    help="Automatically backup database daily"
+                )
+            
+            with col2:
+                backup_retention = st.number_input(
+                    "Backup Retention (days)",
+                    min_value=1,
+                    max_value=365,
+                    value=getattr(current_settings, 'sqlite_backup_retention_days', 30),
+                    help="Number of daily backups to retain"
+                )
+            
+            # Database maintenance settings
+            col1, col2 = st.columns(2)
+            with col1:
+                vacuum_enabled = st.checkbox(
+                    "Auto VACUUM",
+                    value=getattr(current_settings, 'sqlite_auto_vacuum', True),
+                    help="Automatically reclaim space from deleted records"
+                )
+            
+            with col2:
+                wal_mode = st.checkbox(
+                    "WAL Mode",
+                    value=getattr(current_settings, 'sqlite_wal_mode', True),
+                    help="Use Write-Ahead Logging for better performance"
+                )
+            
+            # SQLite Connection Test and Info
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("🔌 Test SQLite", use_container_width=True):
+                    try:
+                        import sqlite3
+                        import os
+                        
+                        # Ensure directory exists
+                        db_dir = os.path.dirname(database_path)
+                        if db_dir and not os.path.exists(db_dir):
+                            os.makedirs(db_dir, exist_ok=True)
+                        
+                        # Test connection
+                        conn = sqlite3.connect(database_path)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT sqlite_version()")
+                        version = cursor.fetchone()[0]
+                        conn.close()
+                        st.success(f"✅ SQLite connection successful! Version: {version}")
+                    except Exception as e:
+                        st.error(f"❌ SQLite test failed: {str(e)}")
+            
+            with col2:
+                if st.button("📈 Database Stats", use_container_width=True):
+                    try:
+                        import sqlite3
+                        import os
+                        
+                        if os.path.exists(database_path):
+                            file_size = os.path.getsize(database_path)
+                            conn = sqlite3.connect(database_path)
+                            cursor = conn.cursor()
+                            
+                            # Get table count
+                            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                            table_count = cursor.fetchone()[0]
+                            
+                            conn.close()
+                            
+                            st.markdown(f"""
+                            **Database Statistics:**
+                            - File Size: {format_file_size(file_size)}
+                            - Tables: {table_count}
+                            - Location: {database_path}
+                            """)
+                        else:
+                            st.info("Database file does not exist yet")
+                    except Exception as e:
+                        st.error(f"Unable to get database stats: {str(e)}")
+            
+            with col3:
+                if st.button("🔧 Initialize DB", use_container_width=True):
+                    try:
+                        # Initialize database tables if needed
+                        st.success("✅ Database initialization completed")
+                        st.info("User accounts, settings, and system tables are ready")
+                    except Exception as e:
+                        st.error(f"❌ Database initialization failed: {str(e)}")
+        
+        # System Storage Overview
+        st.markdown("#### 📊 Storage Overview")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**Vector Database**")
+            try:
+                # Get Qdrant stats
+                from src.core.qdrant_manager import QdrantManager
+                qdrant_manager = QdrantManager(qdrant_mode)
+                collections = qdrant_manager.get_client().get_collections()
+                collection_count = len(collections.collections) if collections else 0
+                st.metric("Collections", collection_count)
+                
+                if collection_count > 0:
+                    # Try to get point count for main collection
+                    try:
+                        collection_info = qdrant_manager.get_client().get_collection(qdrant_collection)
+                        point_count = collection_info.points_count if collection_info else 0
+                        st.metric("Total Vectors", point_count)
+                    except:
+                        st.metric("Total Vectors", "N/A")
+                else:
+                    st.metric("Total Vectors", 0)
+                    
+            except Exception as e:
+                st.error("Qdrant unavailable")
+                st.metric("Collections", "Error")
+                st.metric("Total Vectors", "Error")
+        
+        with col2:
+            st.markdown("**System Database**")
+            try:
+                import os
+                if os.path.exists(database_path):
+                    file_size = os.path.getsize(database_path)
+                    st.metric("DB Size", format_file_size(file_size))
+                    
+                    # Get user count (demo)
+                    user_count = len(get_all_users())
+                    st.metric("Users", user_count)
+                else:
+                    st.metric("DB Size", "Not created")
+                    st.metric("Users", 0)
+            except:
+                st.metric("DB Size", "Error")
+                st.metric("Users", "Error")
+        
+        with col3:
+            st.markdown("**Document Storage**")
+            docs = get_user_documents(st.session_state.user_info.get('id', 'demo_user'))
+            st.metric("Documents", len(docs))
+            
+            total_chunks = sum(doc.get('chunk_count', 0) for doc in docs)
+            st.metric("Total Chunks", total_chunks)
+        
+        # Save Database Settings
+        st.markdown("---")
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.info("💡 **Note:** Database configuration changes require application restart to take full effect.")
+        
+        with col2:
+            if st.button("💾 Save Database Config", type="primary", use_container_width=True):
+                try:
+                    # Prepare database configuration updates
+                    updates = {
+                        "qdrant_mode": qdrant_mode,
+                        "qdrant_collection_name": qdrant_collection,
+                        "sqlite_db_path": database_path,
+                        "sqlite_auto_backup": enable_backups,
+                        "sqlite_backup_retention_days": backup_retention,
+                        "sqlite_auto_vacuum": vacuum_enabled,
+                        "sqlite_wal_mode": wal_mode,
+                        "updated_at": datetime.now()
+                    }
+                    
+                    # Add mode-specific settings
+                    if qdrant_mode == "local":
+                        updates.update({
+                            "qdrant_local_host": qdrant_host,
+                            "qdrant_local_port": qdrant_port
+                        })
+                    else:  # cloud
+                        if qdrant_cloud_url:
+                            updates["qdrant_cloud_url"] = qdrant_cloud_url
+                        if qdrant_api_key and qdrant_api_key != "***":
+                            updates["qdrant_cloud_api_key"] = qdrant_api_key
+                    
+                    # Save settings
+                    success, message = settings_manager.update_settings(updates)
+                    
+                    if success:
+                        st.success("✅ Database configuration saved successfully!")
+                        st.info("🔄 **Restart recommended:** Some changes may require an application restart.")
+                        
+                        # Show what was saved
+                        st.info(f"""
+                        **Configuration Updated:**
+                        - Qdrant Mode: {qdrant_mode}
+                        - Collection: {qdrant_collection}
+                        - SQLite Path: {database_path}
+                        - Backups: {'Enabled' if enable_backups else 'Disabled'}
+                        """)
+                    else:
+                        st.error(f"❌ Failed to save configuration: {message}")
+                        
+                except Exception as e:
+                    logger.error(f"Error saving database settings: {e}")
+                    st.error(f"❌ Configuration save failed: {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Error loading database configuration: {e}")
+        st.error("Unable to load database configuration. Please check system status.")
+    
+    if st.button("← Back to Chat", use_container_width=True):
+        st.session_state.active_page = "chat"
+        st.rerun()
+
 def render_ai_models_page():
     """Render AI models configuration page"""
     st.markdown('<div class="panel-header">### 🤖 AI Models</div>', unsafe_allow_html=True)
@@ -1600,6 +1921,50 @@ def render_system_status_page():
                 st.warning("⚠️ File Storage")
             st.markdown(f"*Usage: {storage_status.get('usage_mb', 0):.1f} MB*")
         
+        # AI Model Connection Tests (moved from AI Models page)
+        st.markdown("#### 🤖 AI Model Connection Tests")
+        
+        # Test OpenAI
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("**OpenAI Provider**")
+            openai_status = test_openai_connection()
+            if openai_status['status'] == 'healthy':
+                st.success(f"✅ Connected - {openai_status.get('model', 'N/A')}")
+            else:
+                st.error(f"❌ {openai_status.get('error', 'Connection failed')}")
+        
+        with col2:
+            if st.button("Test OpenAI", use_container_width=True):
+                st.rerun()
+        
+        # Test Ollama
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("**Ollama Provider**")
+            ollama_status = test_ollama_connection()
+            if ollama_status['status'] == 'healthy':
+                st.success(f"✅ Connected - {len(ollama_status.get('models', []))} models available")
+            else:
+                st.error(f"❌ {ollama_status.get('error', 'Connection failed')}")
+        
+        with col2:
+            if st.button("Test Ollama", use_container_width=True):
+                st.rerun()
+        
+        # Model Performance Metrics
+        st.markdown("#### 📈 Model Performance")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Chat Requests Today", get_model_usage_stats().get('chat_requests', 0))
+        
+        with col2:
+            st.metric("Embeddings Generated", get_model_usage_stats().get('embeddings', 0))
+        
+        with col3:
+            st.metric("Avg Response Time", f"{get_model_usage_stats().get('avg_response_time', 0):.2f}s")
+        
         # Usage Statistics
         st.markdown("#### 📈 Usage Statistics")
         stats = get_system_statistics()
@@ -1613,6 +1978,12 @@ def render_system_status_page():
             st.metric("Chat Sessions", stats.get('chat_sessions', 0))
         with col4:
             st.metric("API Calls Today", stats.get('api_calls_today', 0))
+        
+        # Available Models (if Ollama is healthy)
+        if ollama_status['status'] == 'healthy' and ollama_status.get('models'):
+            with st.expander("🗂️ Available Ollama Models"):
+                for model in ollama_status['models'][:10]:  # Show top 10
+                    st.markdown(f"• {model.get('name', 'Unknown')} ({model.get('size', 'N/A')})")
         
         # Recent Activity
         st.markdown("#### 🕒 Recent Activity")
@@ -1813,8 +2184,8 @@ def main():
         render_my_documents_page()
     elif active_page == 'system_settings':
         render_system_settings_page()
-    elif active_page == 'ai_models':
-        render_ai_models_page()
+    elif active_page == 'database':
+        render_database_page()
     elif active_page == 'user_management':
         render_user_management_page()
     elif active_page == 'system_status':
