@@ -28,6 +28,7 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
+.mcp
 
 # Virtual environments
 venv/
@@ -139,7 +140,10 @@ yarn-error.log*
 # Claude
 claude_config.json
 .claude/*
-CLAUDE.md
+CLAUDE*.*
+
+# Serena
+.serena/
 
 #Playwright
 .playwright-mcp/*
