@@ -1125,6 +1125,29 @@ def render_system_settings_page():
         settings_manager = get_enhanced_settings_manager()
         current_settings = settings_manager.get_settings()
         
+        # Initialize session state for provider mutual exclusivity
+        if "provider_state_initialized" not in st.session_state:
+            # Set initial state based on current settings and .env defaults
+            from src.core.config import config
+            
+            # Determine initial provider state
+            initial_openai_enabled = bool(current_settings.openai_api_key)
+            initial_ollama_enabled = current_settings.ollama_enabled
+            
+            # If both are disabled or both enabled, use .env defaults
+            if not initial_openai_enabled and not initial_ollama_enabled:
+                # Default to .env configuration
+                initial_openai_enabled = config.chat_provider == "openai"
+                initial_ollama_enabled = config.chat_provider == "ollama"
+            elif initial_openai_enabled and initial_ollama_enabled:
+                # If both somehow enabled, prefer .env default
+                initial_openai_enabled = config.chat_provider == "openai"
+                initial_ollama_enabled = config.chat_provider == "ollama"
+            
+            st.session_state.openai_enabled = initial_openai_enabled
+            st.session_state.ollama_enabled = initial_ollama_enabled
+            st.session_state.provider_state_initialized = True
+        
         # AI Provider Settings
         st.markdown("#### 🤖 AI Provider Configuration")
         
@@ -1132,11 +1155,25 @@ def render_system_settings_page():
         
         with col1:
             st.markdown("**OpenAI Settings**")
+            
+            # Track previous state to detect changes
+            previous_openai = st.session_state.openai_enabled
+            
             openai_enabled = st.checkbox(
                 "Enable OpenAI", 
-                value=bool(current_settings.openai_api_key),
-                help="Enable OpenAI for chat and embeddings"
+                value=st.session_state.openai_enabled,
+                help="Enable OpenAI for chat and embeddings",
+                key="openai_checkbox"
             )
+            
+            # Detect OpenAI checkbox change and enforce mutual exclusivity
+            if openai_enabled != previous_openai and openai_enabled:
+                st.session_state.openai_enabled = True
+                st.session_state.ollama_enabled = False
+                st.rerun()
+            elif openai_enabled != previous_openai and not openai_enabled:
+                st.session_state.openai_enabled = False
+                # Don't automatically enable the other - let user choose
             
             if openai_enabled:
                 openai_api_key = st.text_input(
@@ -1160,11 +1197,25 @@ def render_system_settings_page():
         
         with col2:
             st.markdown("**Ollama Settings**")
+            
+            # Track previous state to detect changes
+            previous_ollama = st.session_state.ollama_enabled
+            
             ollama_enabled = st.checkbox(
                 "Enable Ollama", 
-                value=current_settings.ollama_enabled,
-                help="Enable local Ollama models"
+                value=st.session_state.ollama_enabled,
+                help="Enable local Ollama models",
+                key="ollama_checkbox"
             )
+            
+            # Detect Ollama checkbox change and enforce mutual exclusivity
+            if ollama_enabled != previous_ollama and ollama_enabled:
+                st.session_state.ollama_enabled = True
+                st.session_state.openai_enabled = False
+                st.rerun()
+            elif ollama_enabled != previous_ollama and not ollama_enabled:
+                st.session_state.ollama_enabled = False
+                # Don't automatically enable the other - let user choose
             
             if ollama_enabled:
                 ollama_endpoint = st.text_input(
@@ -1183,24 +1234,48 @@ def render_system_settings_page():
                     help="Local embedding model name"
                 )
         
-        # Provider Selection
+        # Provider Selection - Auto-sync with enabled provider
         st.markdown("#### ⚡ Active Providers")
         col1, col2 = st.columns(2)
+        
+        # Determine available providers and defaults
+        from src.core.config import config
+        
+        if openai_enabled and ollama_enabled:
+            # This shouldn't happen with mutual exclusivity, but handle gracefully
+            available_providers = ["openai", "ollama"]
+            default_chat = current_settings.preferred_chat_provider
+            default_embedding = current_settings.preferred_embedding_provider
+        elif openai_enabled:
+            available_providers = ["openai"]
+            default_chat = "openai"
+            default_embedding = "openai"
+        elif ollama_enabled:
+            available_providers = ["ollama"]
+            default_chat = "ollama" 
+            default_embedding = "ollama"
+        else:
+            # Neither enabled - show both but use .env defaults
+            available_providers = ["openai", "ollama"]
+            default_chat = config.chat_provider
+            default_embedding = config.embedding_provider
         
         with col1:
             preferred_chat_provider = st.selectbox(
                 "Chat Provider",
-                options=["openai", "ollama"],
-                index=0 if current_settings.preferred_chat_provider == "openai" else 1,
-                help="Primary provider for chat responses"
+                options=available_providers,
+                index=available_providers.index(default_chat) if default_chat in available_providers else 0,
+                help="Primary provider for chat responses",
+                disabled=len(available_providers) == 1
             )
         
         with col2:
             preferred_embedding_provider = st.selectbox(
                 "Embedding Provider", 
-                options=["openai", "ollama"],
-                index=0 if current_settings.preferred_embedding_provider == "openai" else 1,
-                help="Primary provider for document embeddings"
+                options=available_providers,
+                index=available_providers.index(default_embedding) if default_embedding in available_providers else 0,
+                help="Primary provider for document embeddings",
+                disabled=len(available_providers) == 1
             )
         
         # Document Processing Settings
@@ -1275,7 +1350,7 @@ def render_system_settings_page():
         with col2:
             if st.button("💾 Save Settings", use_container_width=True):
                 try:
-                    # Prepare updates dictionary
+                    # Prepare updates dictionary with mutual exclusivity enforced
                     updates = {
                         "openai_api_key": openai_api_key if openai_enabled else None,
                         "openai_chat_model": openai_chat_model if openai_enabled else current_settings.openai_chat_model,
@@ -1295,10 +1370,21 @@ def render_system_settings_page():
                         "updated_at": datetime.now()
                     }
                     
+                    # Additional consistency enforcement
+                    if openai_enabled and ollama_enabled:
+                        # This shouldn't happen, but enforce consistency
+                        if preferred_chat_provider == "openai":
+                            updates["ollama_enabled"] = False
+                        else:
+                            updates["openai_api_key"] = None
+                    
                     # Save settings using update_settings method
                     success, message = settings_manager.update_settings(updates)
                     if success:
                         st.success("✅ Settings saved successfully!")
+                        # Update session state to reflect saved settings
+                        st.session_state.openai_enabled = bool(updates.get("openai_api_key"))
+                        st.session_state.ollama_enabled = updates.get("ollama_enabled", False)
                     else:
                         st.error(f"Failed to save settings: {message}")
                     
