@@ -2,6 +2,35 @@
 Simplified Zenith AI Chat Interface
 Refactored from complex three-panel layout to clean Streamlit components
 Preserves all backend integrations with improved UX
+
+Provides secure database configuration interface with comprehensive path validation
+and protection against path traversal attacks. Integrates security-enhanced
+database settings management throughout the admin interface.
+
+Key components:
+    - render_database_page: Secure database configuration interface with path validation
+    - render_system_settings_page: System settings with database security integration
+    - render_main_chat_interface: Primary three-panel chat layout
+
+Key functions:
+    - validate_database_path: Secure database path validation using database_security module
+    - sanitize_database_settings: Settings sanitization before persistence
+    - secure_sqlite_connection: Safe database connectivity testing
+
+Security features:
+    - Database path traversal protection in configuration interface
+    - Secure SQLite connection testing with timeout protection
+    - Settings validation and sanitization before storage
+    - Project boundary enforcement for database file paths
+
+Integration points:
+    - Uses src.utils.database_security for comprehensive security validation
+    - Integrates with enhanced_settings_manager for secure settings persistence
+    - Provides secure database configuration UI for administrators
+
+See Also:
+    - src.utils.database_security: Database security validation functions
+    - src.core.enhanced_settings_manager: Settings management with security integration
 """
 
 import os
@@ -26,6 +55,10 @@ from src.core.enhanced_chat_engine import EnhancedChatEngine
 from src.core.pdf_processor import PDFProcessor
 from src.core.enhanced_settings_manager import get_enhanced_settings_manager
 from src.core.chat_history import get_chat_history_manager, ChatSession, ChatMessage
+from src.utils.database_security import (
+    validate_database_path, secure_sqlite_connection, 
+    sanitize_database_settings, check_database_connection
+)
 from src.auth.auth_manager import (
     AuthenticationManager, init_auth_session, get_current_user_from_session,
     require_authentication, require_admin, logout_user_session
@@ -1504,11 +1537,25 @@ def render_database_page():
         
         with st.expander("SQLite Settings", expanded=True):
             # Database file location
-            database_path = st.text_input(
+            # Secure database path input with validation
+            database_path_input = st.text_input(
                 "Database File Path",
                 value=getattr(current_settings, 'sqlite_db_path', './data/zenith.db'),
-                help="Path to SQLite database file for system data"
+                help="Path to SQLite database file for system data (restricted to project directory)"
             )
+            
+            # Validate the database path
+            project_root = Path(__file__).parent.parent.parent
+            is_valid, error_msg, validated_path = validate_database_path(database_path_input, project_root)
+            
+            if not is_valid:
+                st.error(f"❌ Invalid database path: {error_msg}")
+                database_path = getattr(current_settings, 'sqlite_db_path', './data/zenith.db')
+                st.info(f"Using current path: {database_path}")
+            else:
+                database_path = str(validated_path)
+                if str(validated_path) != database_path_input:
+                    st.info(f"✅ Path validated and normalized: {database_path}")
             
             # Auto-backup configuration
             col1, col2 = st.columns(2)
@@ -1548,47 +1595,40 @@ def render_database_page():
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.button("🔌 Test SQLite", use_container_width=True):
-                    try:
-                        import sqlite3
-                        import os
-                        
-                        # Ensure directory exists
-                        db_dir = os.path.dirname(database_path)
-                        if db_dir and not os.path.exists(db_dir):
-                            os.makedirs(db_dir, exist_ok=True)
-                        
-                        # Test connection
-                        conn = sqlite3.connect(database_path)
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT sqlite_version()")
-                        version = cursor.fetchone()[0]
-                        conn.close()
-                        st.success(f"✅ SQLite connection successful! Version: {version}")
-                    except Exception as e:
-                        st.error(f"❌ SQLite test failed: {str(e)}")
+                    # Use secure database connection test
+                    success, message, db_info = check_database_connection(database_path, project_root)
+                    
+                    if success:
+                        st.success(f"✅ SQLite connection successful! Version: {db_info.get('version', 'Unknown')}")
+                        if db_info.get('created_directory'):
+                            st.info(f"📁 Created secure directory: {db_info['directory']}")
+                    else:
+                        st.error(f"❌ SQLite test failed: {message}")
             
             with col2:
                 if st.button("📈 Database Stats", use_container_width=True):
                     try:
-                        import sqlite3
-                        import os
+                        # Validate path first
+                        is_valid, error_msg, validated_path = validate_database_path(database_path, project_root)
                         
-                        if os.path.exists(database_path):
-                            file_size = os.path.getsize(database_path)
-                            conn = sqlite3.connect(database_path)
-                            cursor = conn.cursor()
+                        if not is_valid:
+                            st.error(f"❌ Invalid database path: {error_msg}")
+                            return
                             
-                            # Get table count
-                            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-                            table_count = cursor.fetchone()[0]
+                        if validated_path.exists():
+                            file_size = validated_path.stat().st_size
                             
-                            conn.close()
+                            # Use secure connection for database stats
+                            with secure_sqlite_connection(validated_path) as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                                table_count = cursor.fetchone()[0]
                             
                             st.markdown(f"""
                             **Database Statistics:**
                             - File Size: {format_file_size(file_size)}
                             - Tables: {table_count}
-                            - Location: {database_path}
+                            - Location: {validated_path}
                             """)
                         else:
                             st.info("Database file does not exist yet")
@@ -1638,9 +1678,14 @@ def render_database_page():
         with col2:
             st.markdown("**System Database**")
             try:
-                import os
-                if os.path.exists(database_path):
-                    file_size = os.path.getsize(database_path)
+                # Validate database path before accessing
+                is_valid, error_msg, validated_path = validate_database_path(database_path, project_root)
+                
+                if not is_valid:
+                    st.metric("DB Size", "Invalid Path")
+                    st.metric("Users", "Error")
+                elif validated_path.exists():
+                    file_size = validated_path.stat().st_size
                     st.metric("DB Size", format_file_size(file_size))
                     
                     # Get user count (demo)
@@ -1649,7 +1694,7 @@ def render_database_page():
                 else:
                     st.metric("DB Size", "Not created")
                     st.metric("Users", 0)
-            except:
+            except Exception as e:
                 st.metric("DB Size", "Error")
                 st.metric("Users", "Error")
         
@@ -1671,8 +1716,8 @@ def render_database_page():
         with col2:
             if st.button("💾 Save Database Config", type="primary", use_container_width=True):
                 try:
-                    # Prepare database configuration updates
-                    updates = {
+                    # Validate and sanitize database configuration before saving
+                    raw_updates = {
                         "qdrant_mode": qdrant_mode,
                         "qdrant_collection_name": qdrant_collection,
                         "sqlite_db_path": database_path,
@@ -1682,6 +1727,9 @@ def render_database_page():
                         "sqlite_wal_mode": wal_mode,
                         "updated_at": datetime.now()
                     }
+                    
+                    # Apply security sanitization to database settings
+                    updates = sanitize_database_settings(raw_updates, project_root)
                     
                     # Add mode-specific settings
                     if qdrant_mode == "local":

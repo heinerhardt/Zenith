@@ -1,5 +1,31 @@
 """
 Enhanced Settings Manager for Zenith - Handles dynamic reinitialization and provider switching
+
+Provides comprehensive settings management with security-enhanced validation framework.
+Integrates database security validation for configuration updates and prevents
+path traversal vulnerabilities in database settings.
+
+Key classes:
+    - EnhancedSettingsManager: Main settings manager with security-enhanced validation
+    - ProviderInitializationError: Exception for provider initialization failures
+
+Key functions:
+    - get_enhanced_settings_manager: Global singleton access
+    - _validate_settings_update: Security-enhanced settings validation with database path protection
+
+Security enhancements:
+    - Database path validation using src.utils.database_security module
+    - Prevents path traversal attacks on SQLite database configurations
+    - Validates backup retention and boolean settings with proper type coercion
+
+Integration points:
+    - Uses database_security.validate_database_path for secure path validation
+    - Integrates with Qdrant for settings persistence
+    - Provides callbacks for provider state changes
+
+See Also:
+    - src.utils.database_security: Database security validation functions
+    - src.auth.models.SystemSettings: Settings data model
 """
 
 from typing import Dict, Any, Optional, List, Tuple, Callable
@@ -778,6 +804,45 @@ class EnhancedSettingsManager:
         if "qdrant_mode" in updates:
             if updates["qdrant_mode"] not in ["local", "cloud"]:
                 return "Invalid Qdrant mode. Must be 'local' or 'cloud'"
+        
+        # Validate database settings (SECURITY ENHANCEMENT)
+        if "sqlite_db_path" in updates:
+            try:
+                from pathlib import Path
+                from src.utils.database_security import validate_database_path
+                
+                project_root = Path(__file__).parent.parent.parent
+                is_valid, error_msg, validated_path = validate_database_path(
+                    updates["sqlite_db_path"], project_root
+                )
+                
+                if not is_valid:
+                    return f"Invalid database path: {error_msg}"
+                    
+                # Update the path with the validated, normalized version
+                updates["sqlite_db_path"] = str(validated_path)
+                
+            except Exception as e:
+                return f"Database path validation error: {str(e)}"
+        
+        # Validate SQLite backup retention
+        if "sqlite_backup_retention_days" in updates:
+            try:
+                value = int(updates["sqlite_backup_retention_days"])
+                if not (1 <= value <= 365):
+                    return "Backup retention days must be between 1 and 365"
+            except (ValueError, TypeError):
+                return "Backup retention days must be a valid number"
+        
+        # Validate boolean SQLite settings
+        sqlite_boolean_fields = [
+            "sqlite_auto_backup", "sqlite_auto_vacuum", "sqlite_wal_mode"
+        ]
+        
+        for field in sqlite_boolean_fields:
+            if field in updates:
+                if not isinstance(updates[field], bool):
+                    return f"{field} must be true or false"
         
         # Validate numeric values
         numeric_fields = {
