@@ -8,8 +8,8 @@ from datetime import datetime
 
 from .qdrant_manager import get_qdrant_client
 from .config import config
-from ..auth.models import SystemSettings
-from ..utils.logger import get_logger
+from src.auth.models import SystemSettings
+from src.utils.logger import get_logger
 from qdrant_client.http import models
 
 logger = get_logger(__name__)
@@ -299,7 +299,7 @@ class SettingsManager:
     def test_openai_connection(self, api_key: Optional[str] = None) -> Tuple[bool, str]:
         """Test OpenAI connection"""
         try:
-            from ..core.enhanced_chat_engine import OpenAIChatProvider
+            from src.core.enhanced_chat_engine import OpenAIChatProvider
             
             test_key = api_key or self._current_settings.openai_api_key
             if not test_key:
@@ -319,7 +319,7 @@ class SettingsManager:
     def test_ollama_connection(self, endpoint: Optional[str] = None) -> Tuple[bool, str]:
         """Test Ollama connection"""
         try:
-            from ..core.ollama_integration import OllamaClient
+            from src.core.ollama_integration import OllamaClient
             
             test_endpoint = endpoint or self._current_settings.ollama_endpoint
             client = OllamaClient(test_endpoint)
@@ -336,7 +336,7 @@ class SettingsManager:
     def test_qdrant_connection(self, mode: str, **kwargs) -> Tuple[bool, str]:
         """Test Qdrant connection"""
         try:
-            from ..core.qdrant_manager import QdrantManager
+            from src.core.qdrant_manager import QdrantManager
             
             # Create temporary manager with test settings
             test_manager = QdrantManager(mode)

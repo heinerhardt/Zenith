@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 import logging
 import uuid
 
-from ..core.config import config
-from ..utils.logger import get_logger
+from src.core.config import config
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

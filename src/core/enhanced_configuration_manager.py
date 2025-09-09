@@ -22,10 +22,18 @@ from pydantic import BaseModel, Field, ValidationError, validator
 from pydantic.types import StrictStr, StrictInt, StrictBool, StrictFloat
 
 from .secrets_manager import get_secrets_manager, SecretType
-from ..utils.database_security import secure_database_connection
-from ..utils.logger import get_logger
+from src.utils.database_security import secure_sqlite_connection
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ConfigJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for configuration schemas"""
+    def default(self, obj):
+        if isinstance(obj, Enum):
+            return obj.value
+        return super().default(obj)
 
 
 class ConfigScope(Enum):
@@ -222,7 +230,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
     
     def _initialize_database(self):
         """Initialize configuration database tables"""
-        with secure_database_connection(self.database_path) as conn:
+        with secure_sqlite_connection(Path(self.database_path)) as conn:
             # Configuration values table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS configuration_values (
@@ -270,7 +278,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
     def get_value(self, key: str, environment: str = "default") -> Optional[Any]:
         """Get configuration value from database"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 cursor = conn.execute("""
                     SELECT value, value_type FROM configuration_values 
                     WHERE key = ? AND environment = ?
@@ -290,7 +298,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
                   changed_by: str = "system", reason: str = None) -> bool:
         """Set configuration value in database"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 # Get old value for history
                 cursor = conn.execute("""
                     SELECT value, value_type FROM configuration_values 
@@ -330,7 +338,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
                      changed_by: str = "system", reason: str = None) -> bool:
         """Delete configuration value"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 # Get old value for history
                 cursor = conn.execute("""
                     SELECT value, value_type FROM configuration_values 
@@ -365,7 +373,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
     def list_keys(self, environment: str = "default") -> List[str]:
         """List configuration keys"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 cursor = conn.execute("""
                     SELECT key FROM configuration_values 
                     WHERE environment = ? 
@@ -382,7 +390,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
                    limit: int = 100) -> List[Dict[str, Any]]:
         """Get configuration change history"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 query = """
                     SELECT key, old_value, new_value, value_type, environment, 
                            change_type, timestamp, changed_by, reason
@@ -428,8 +436,8 @@ class DatabaseConfigurationStore(ConfigurationStore):
     def store_schema(self, schema: ConfigSchema) -> bool:
         """Store configuration schema"""
         try:
-            with secure_database_connection(self.database_path) as conn:
-                schema_json = json.dumps(schema.dict())
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
+                schema_json = json.dumps(schema.dict(), cls=ConfigJSONEncoder)
                 
                 conn.execute("""
                     INSERT OR REPLACE INTO configuration_schemas 
@@ -447,7 +455,7 @@ class DatabaseConfigurationStore(ConfigurationStore):
     def get_schema(self, key: str) -> Optional[ConfigSchema]:
         """Get configuration schema"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(Path(self.database_path)) as conn:
                 cursor = conn.execute("""
                     SELECT schema_json FROM configuration_schemas WHERE key = ?
                 """, (key,))
@@ -963,6 +971,7 @@ class EnhancedConfigurationManager:
             'cache_entries': len(self._config_cache),
             'hot_reload_active': self.enable_hot_reload and self._reload_thread and self._reload_thread.is_alive(),
             'environment': self.environment,
+            'available_backends': 1,
             'errors': []
         }
         

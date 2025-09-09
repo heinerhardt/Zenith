@@ -13,12 +13,12 @@ from pathlib import Path
 import asyncio
 import logging
 
-from ..core.pdf_processor import PDFProcessor
-from ..core.vector_store import VectorStore
-from ..core.chat_engine import ChatEngine
-from ..core.config import config
-from ..utils.logger import get_logger
-from ..utils.helpers import validate_file_type, format_file_size, create_temp_file
+from src.core.pdf_processor import PDFProcessor
+from src.core.vector_store import VectorStore
+from src.core.chat_engine import ChatEngine
+from src.core.config import config
+from src.utils.logger import get_logger
+from src.utils.helpers import validate_file_type, format_file_size, create_temp_file
 
 logger = get_logger(__name__)
 

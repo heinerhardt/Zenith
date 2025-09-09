@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from loguru import logger as loguru_logger
 
-from ..core.config import get_logs_dir, config
+from src.core.config import get_logs_dir, config
 
 
 def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None):

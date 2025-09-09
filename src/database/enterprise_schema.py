@@ -12,8 +12,13 @@ from enum import Enum
 from pathlib import Path
 import uuid
 
-from ..utils.logger import get_logger
-from ..utils.database_security import DatabaseSecurityManager, secure_database_connection
+from src.utils.logger import get_logger
+from src.utils.database_security import (
+    validate_database_path,
+    check_database_connection,
+    sanitize_database_settings,
+    secure_sqlite_connection
+)
 
 logger = get_logger(__name__)
 
@@ -249,7 +254,7 @@ class DatabaseSchema:
             message_id VARCHAR(36) UNIQUE NOT NULL,
             parent_message_id VARCHAR(36),
             message_content TEXT NOT NULL,
-            message_type ENUM('user', 'assistant', 'system') NOT NULL,
+            message_type TEXT CHECK (message_type IN ('user', 'assistant', 'system')) NOT NULL,
             model_name VARCHAR(100),
             provider VARCHAR(50),
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -524,7 +529,6 @@ class EnterpriseDatabase:
     def __init__(self, database_path: str):
         """Initialize enterprise database manager"""
         self.database_path = Path(database_path)
-        self.security_manager = DatabaseSecurityManager()
         
         # Ensure database directory exists
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -534,7 +538,7 @@ class EnterpriseDatabase:
     def initialize_database(self) -> bool:
         """Initialize database with enterprise schema"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 # Enable WAL mode for better concurrency
                 conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute("PRAGMA synchronous=NORMAL;")
@@ -569,7 +573,7 @@ class EnterpriseDatabase:
     def get_current_schema_version(self) -> int:
         """Get current database schema version"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute(
                     "SELECT MAX(version) FROM schema_version WHERE version IS NOT NULL"
                 )
@@ -696,10 +700,11 @@ class EnterpriseDatabase:
             """, perm)
     
     def create_admin_user(self, username: str, email: str, password_hash: str, 
-                         full_name: str = "System Administrator") -> Optional[str]:
+                         full_name: str = "System Administrator", 
+                         force_recreate: bool = False) -> Optional[str]:
         """Create admin user and return user UUID"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 # Get admin role ID
                 cursor = conn.execute(
                     "SELECT id FROM roles WHERE name = ?", 
@@ -711,9 +716,38 @@ class EnterpriseDatabase:
                     return None
                 
                 role_id = role_result[0]
-                user_uuid = str(uuid.uuid4())
                 
-                # Create admin user
+                # Check if admin user already exists
+                cursor = conn.execute(
+                    "SELECT uuid, username, email FROM users WHERE email = ? OR username = ?", 
+                    (email, username)
+                )
+                existing_user = cursor.fetchone()
+                
+                if existing_user:
+                    existing_uuid, existing_username, existing_email = existing_user
+                    
+                    if force_recreate:
+                        logger.info(f"Recreating existing admin user: {existing_username}")
+                        # Update existing user with new information
+                        conn.execute("""
+                            UPDATE users 
+                            SET username = ?, email = ?, password_hash = ?, password_algorithm = ?,
+                                role_id = ?, full_name = ?, is_active = TRUE, is_verified = TRUE,
+                                email_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                            WHERE uuid = ?
+                        """, (username, email, password_hash, 'argon2id', role_id, full_name, existing_uuid))
+                        
+                        conn.commit()
+                        logger.info(f"Updated admin user: {username}")
+                        return existing_uuid
+                    else:
+                        logger.info(f"Admin user already exists: {existing_username} ({existing_email})")
+                        logger.info("Skipping admin creation - use force_recreate=True to overwrite")
+                        return existing_uuid
+                
+                # Create new admin user
+                user_uuid = str(uuid.uuid4())
                 conn.execute("""
                     INSERT INTO users 
                     (uuid, username, email, password_hash, password_algorithm, role_id, 
@@ -723,7 +757,7 @@ class EnterpriseDatabase:
                 
                 conn.commit()
                 
-                logger.info(f"Created admin user: {username}")
+                logger.info(f"Created new admin user: {username}")
                 return user_uuid
                 
         except Exception as e:
@@ -739,11 +773,12 @@ class EnterpriseDatabase:
             'wal_mode_enabled': False,
             'foreign_keys_enabled': False,
             'total_size_bytes': 0,
+            'available_backends': 1,  # Fixed: Added missing field for system validation
             'errors': []
         }
         
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 # Basic connectivity
                 health_status['database_accessible'] = True
                 
@@ -769,6 +804,7 @@ class EnterpriseDatabase:
                 
         except Exception as e:
             health_status['errors'].append(str(e))
+            health_status['available_backends'] = 0  # Set to 0 if database is not accessible
             logger.error(f"Database health check failed: {e}")
         
         return health_status

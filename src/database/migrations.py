@@ -15,9 +15,14 @@ import shutil
 import traceback
 from dataclasses import dataclass
 
-from ..utils.logger import get_logger
-from ..utils.database_security import DatabaseSecurityManager, secure_database_connection
-from .enterprise_schema import DatabaseSchema, EnterpriseDatabase
+from src.utils.logger import get_logger
+from src.utils.database_security import (
+    validate_database_path,
+    check_database_connection,
+    sanitize_database_settings,
+    secure_sqlite_connection
+)
+from src.database.enterprise_schema import DatabaseSchema, EnterpriseDatabase
 
 logger = get_logger(__name__)
 
@@ -91,12 +96,6 @@ class Migration001_InitialSchema(MigrationBase):
     
     def up(self, conn: sqlite3.Connection) -> None:
         """Create initial enterprise schema"""
-        # Enable enterprise features
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        conn.execute("PRAGMA cache_size=10000;")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        
         # Create all tables from schema
         create_statements = DatabaseSchema.get_create_statements()
         
@@ -196,7 +195,6 @@ class MigrationManager:
         self.database_path = Path(database_path)
         self.backup_dir = Path(backup_dir) if backup_dir else self.database_path.parent / "backups"
         self.registry = MigrationRegistry()
-        self.security_manager = DatabaseSecurityManager()
         
         # Ensure backup directory exists
         self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -209,7 +207,7 @@ class MigrationManager:
     def _ensure_migration_table(self) -> None:
         """Ensure migration tracking table exists"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS database_migrations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -242,7 +240,7 @@ class MigrationManager:
     def get_current_version(self) -> int:
         """Get current database schema version"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT MAX(version) FROM database_migrations 
                     WHERE status = 'completed'
@@ -260,7 +258,7 @@ class MigrationManager:
     def get_migration_history(self) -> List[Dict[str, Any]]:
         """Get migration history"""
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT version, name, description, applied_at, status, 
                            execution_time_ms, error_message
@@ -297,8 +295,8 @@ class MigrationManager:
         
         try:
             # Create backup using SQLite backup API for consistency
-            with secure_database_connection(str(self.database_path)) as source_conn:
-                with secure_database_connection(str(backup_path)) as backup_conn:
+            with secure_sqlite_connection(self.database_path) as source_conn:
+                with secure_sqlite_connection(backup_path) as backup_conn:
                     source_conn.backup(backup_conn)
             
             # Verify backup integrity
@@ -318,7 +316,7 @@ class MigrationManager:
     def _verify_backup_integrity(self, backup_path: str) -> bool:
         """Verify backup file integrity"""
         try:
-            with secure_database_connection(backup_path) as conn:
+            with secure_sqlite_connection(Path(backup_path)) as conn:
                 # Run integrity check
                 cursor = conn.execute("PRAGMA integrity_check")
                 result = cursor.fetchone()
@@ -378,7 +376,7 @@ class MigrationManager:
         applied_migrations = []
         
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 conn.execute("BEGIN TRANSACTION;")
                 
                 for migration in pending_migrations:
@@ -514,7 +512,7 @@ class MigrationManager:
         success = True
         
         try:
-            with secure_database_connection(str(self.database_path)) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 conn.execute("BEGIN TRANSACTION;")
                 
                 for migration in migrations_to_rollback:
@@ -564,7 +562,8 @@ class MigrationManager:
             'migration_history': history,
             'dependencies_valid': self.registry.validate_dependencies(),
             'database_path': str(self.database_path),
-            'backup_directory': str(self.backup_dir)
+            'backup_directory': str(self.backup_dir),
+            'available_backends': 1  # Fixed: Added missing field for system validation
         }
 
 

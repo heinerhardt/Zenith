@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8501, env="APP_PORT")
     debug_mode: bool = Field(default=True, env="DEBUG_MODE")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    first_setup: bool = Field(default=True, env="FIRST_SETUP")
     
     # File Processing Configuration
     max_file_size_mb: int = Field(default=50, env="MAX_FILE_SIZE_MB")

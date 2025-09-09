@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 from datetime import datetime
 import time
-from ..core.langfuse_integration import trace_rag_flow_if_enabled, flush_langfuse
+from src.core.langfuse_integration import trace_rag_flow_if_enabled, flush_langfuse
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -16,7 +16,7 @@ from .config import config
 from .enhanced_vector_store import UserVectorStore
 from .ollama_integration import get_ollama_manager, OllamaChatEngine
 from .provider_manager import get_provider_manager
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -193,7 +193,7 @@ class EnhancedChatEngine:
             logger.error(f"Failed to initialize chat provider: {e}")
             # Try fallback initialization
             try:
-                from ..core.config import config
+                from src.core.config import config
                 fallback_provider = config.chat_provider
                 logger.warning(f"Trying fallback provider: {fallback_provider}")
                 

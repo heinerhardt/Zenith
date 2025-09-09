@@ -8,8 +8,8 @@ from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams
 import numpy as np
 
-from ..core.config import config
-from ..utils.logger import get_logger
+from src.core.config import config
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

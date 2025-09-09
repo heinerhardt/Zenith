@@ -16,7 +16,7 @@ from qdrant_client.http.models import Distance, VectorParams
 from .config import config
 from .qdrant_manager import get_qdrant_client, QdrantManager
 from .ollama_integration import get_ollama_manager, OllamaEmbeddingEngine
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

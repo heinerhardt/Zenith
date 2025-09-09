@@ -12,7 +12,7 @@ import tempfile
 import mimetypes
 import time
 
-from ..core.config import config
+from src.core.config import config
 from .logger import get_logger
 
 logger = get_logger(__name__)

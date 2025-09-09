@@ -15,7 +15,7 @@ from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams
 
 from .config import config
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

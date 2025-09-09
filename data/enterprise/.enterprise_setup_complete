@@ -1,0 +1,28 @@
+{
+  "setup_version": "1.0.0",
+  "completed_at": "2025-09-08T20:29:57.337377",
+  "environment": "production",
+  "database_path": "./data/enterprise/zenith.db",
+  "configuration": {
+    "database_path": "./data/enterprise/zenith.db",
+    "enable_wal_mode": true,
+    "backup_before_setup": true,
+    "admin_username": "admin",
+    "admin_email": "admin@zenith.local",
+    "admin_password": "P@ssw0rd",
+    "admin_full_name": "System Administrator",
+    "password_policy": null,
+    "jwt_secret_key": null,
+    "encryption_key": null,
+    "secrets_backend": "local_encrypted",
+    "secrets_storage_path": "./data/enterprise/secrets",
+    "environment": "production",
+    "debug_mode": false,
+    "enable_hot_config_reload": true,
+    "enable_audit_logging": true,
+    "enable_security_monitoring": true,
+    "qdrant_url": "http://localhost:6333",
+    "openai_api_key": null,
+    "anthropic_api_key": null
+  }
+}

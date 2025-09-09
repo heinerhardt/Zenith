@@ -147,14 +147,73 @@ st.markdown("""
 
 /* ===== MODERN CARD COMPONENTS ===== */
 .sercompe-card {
-    background: var(--sercompe-white);
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
     border-radius: var(--sercompe-border-radius);
-    border: 1px solid var(--sercompe-gray-200);
-    box-shadow: var(--sercompe-shadow);
+    border: 1px solid #4a5568;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     padding: 1.5rem;
     margin: 1rem 0;
     transition: all 0.2s ease-in-out;
 }
+
+.sercompe-card h1,
+.sercompe-card .sercompe-title {
+    color: #ffffff !important;
+}
+
+.sercompe-card p,
+.sercompe-card .sercompe-text {
+    color: #e2e8f0 !important;
+}
+
+/* ===== DARK TABS STYLING ===== */
+.stTabs [data-baseweb="tab-list"] {
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    border-radius: var(--sercompe-border-radius);
+    border: 1px solid #4a5568;
+    padding: 0.5rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    margin: 0 0.25rem;
+}
+
+.stTabs [aria-selected="true"] {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff !important;
+}
+
+.stTabs [data-baseweb="tab-panel"] {
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    border-radius: var(--sercompe-border-radius);
+    border: 1px solid #4a5568;
+    padding: 2rem;
+    margin-top: 1rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.stTabs [data-baseweb="tab-panel"] label,
+.stTabs [data-baseweb="tab-panel"] p {
+    color: #e2e8f0 !important;
+}
+
+.stTabs [data-baseweb="tab-panel"] input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #4a5568;
+    color: #ffffff;
+    border-radius: 8px;
+}
+
+.stTabs [data-baseweb="tab-panel"] button[kind="primary"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+}
+
 
 .sercompe-card:hover {
     box-shadow: var(--sercompe-shadow-lg);
@@ -611,9 +670,21 @@ class ZenithAuthenticatedApp:
                 <p class="sercompe-text" style="text-align: center; margin-bottom: 2rem; font-size: 16px;">
                     Intelligent Document Chat System
                 </p>
-                <div class="sercompe-info" style="text-align: center;">
-                    <strong>Secure Authentication Required</strong><br>
-                    <small>Access your personalized document workspace</small>
+                <div style="
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin: 20px 0;
+                    color: white;
+                    text-align: center;
+                    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                ">
+                    <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
+                        🔐 Secure Authentication Required
+                    </div>
+                    <div style="font-size: 14px; opacity: 0.9;">
+                        Access your personalized document workspace
+                    </div>
                 </div>
             </div>
             ''', unsafe_allow_html=True)
@@ -2929,7 +3000,7 @@ class ZenithAuthenticatedApp:
         with col1:
             if st.button("🔍 Check Vector Dimensions", type="secondary"):
                 try:
-                    from ..core.enhanced_vector_store import EnhancedVectorStore
+                    from src.core.enhanced_vector_store import EnhancedVectorStore
                     
                     vector_store = EnhancedVectorStore()
                     compatible, message, collection_dim, provider_dim = vector_store.check_dimension_compatibility()
@@ -2950,7 +3021,7 @@ class ZenithAuthenticatedApp:
             if st.session_state.get('dimension_mismatch', False):
                 if st.button("🔄 Fix Dimension Mismatch", type="primary"):
                     try:
-                        from ..core.enhanced_vector_store import EnhancedVectorStore
+                        from src.core.enhanced_vector_store import EnhancedVectorStore
                         
                         with st.spinner("Recreating collection with correct dimensions..."):
                             vector_store = EnhancedVectorStore()

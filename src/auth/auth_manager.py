@@ -9,11 +9,11 @@ from datetime import datetime
 import json
 
 from .models import User, UserSession, UserRole, UserRegistrationRequest, UserLoginRequest
-from ..utils.security import (
+from src.utils.security import (
     PasswordManager, JWTManager, SessionManager, RateLimiter,
     SecurityValidator, hash_password, verify_password
 )
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

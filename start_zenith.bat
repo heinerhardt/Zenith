@@ -1,6 +1,6 @@
 @echo off
-REM Zenith AI Chat - Enhanced Enterprise Startup Script (Windows)
-REM Supports enterprise setup, multi-mode startup, and comprehensive health checks
+REM Zenith AI Chat - Simplified Enterprise Startup Script (Windows)
+REM Auto-detects setup state and runs appropriate mode
 
 setlocal enabledelayedexpansion
 
@@ -8,30 +8,18 @@ REM Configuration variables
 set "SCRIPT_DIR=%~dp0"
 set "STARTUP_LOG=%SCRIPT_DIR%data\logs\startup.log"
 set "ENTERPRISE_MARKER=%SCRIPT_DIR%data\enterprise\.enterprise_configured"
-
-REM Parse command line arguments
-set "mode="
-set "interactive=true"
 set "port=8501"
 
+REM Parse command line arguments
 :parse_args
 if "%~1"=="" goto args_done
 if "%~1"=="--help" goto show_help
-if "%~1"=="--non-interactive" (
-    set "interactive=false"
-    shift
-    goto parse_args
-)
 if "%~1" neq "" (
     REM Check if argument contains equals sign
     echo.%~1 | findstr /C:"=" >nul 2>&1
     if not errorlevel 1 (
         REM Parse argument with equals sign
         for /f "tokens=1,2 delims==" %%a in ("%~1") do (
-            if "%%a"=="--mode" (
-                set "mode=%%b"
-                call :log "DEBUG" "Mode set to: %%b"
-            )
             if "%%a"=="--port" (
                 set "port=%%b"
                 call :log "DEBUG" "Port set to: %%b"
@@ -49,13 +37,9 @@ if "%~1" neq "" (
 REM Create required directories
 if not exist "%SCRIPT_DIR%data\logs" mkdir "%SCRIPT_DIR%data\logs" 2>nul
 if not exist "%SCRIPT_DIR%data\enterprise" mkdir "%SCRIPT_DIR%data\enterprise" 2>nul
-if not exist "%SCRIPT_DIR%data\backups" mkdir "%SCRIPT_DIR%data\backups" 2>nul
 
 REM Initialize log file
 echo. > "%STARTUP_LOG%" 2>nul
-
-REM Log function (simplified for batch)
-call :log "INFO" "Zenith startup initiated"
 
 REM Print banner
 call :print_banner
@@ -76,89 +60,36 @@ call :setup_virtual_environment
 REM Ensure Python dependencies are available
 call :ensure_python_dependencies
 
-REM Interactive mode selection if not specified
-if "%mode%"=="" if "%interactive%"=="true" (
-    call :show_startup_menu
-    call :set_mode_from_choice
-)
+REM Smart startup logic - Check enterprise setup state
+call :log "INFO" "Checking enterprise setup status..."
 
-REM Set default mode if still not specified
-if "%mode%"=="" set "mode=development"
-
-REM Handle different startup modes
-if "%mode%"=="setup" goto mode_setup
-if "%mode%"=="reset" goto mode_reset
-if "%mode%"=="health" goto mode_health
-if "%mode%"=="production" goto mode_run
-if "%mode%"=="development" goto mode_run
-if "%mode%"=="demo" goto mode_run
-if "%mode%"=="simple" goto mode_run
-
-call :log "ERROR" "Unknown mode: %mode%"
-goto error_exit
-
-:mode_setup
-    call :log "INFO" "Starting enterprise setup..."
-    call :run_enterprise_setup
-    if errorlevel 1 (
-        call :log "ERROR" "Enterprise setup failed"
+if exist "%ENTERPRISE_MARKER%" (
+    call :log "INFO" "Enterprise setup detected - Starting in Production Mode"
+    call :start_production_mode
+) else (
+    call :log "INFO" "No enterprise setup found - Running interactive setup"
+    call :run_interactive_setup
+    if not errorlevel 1 (
+        echo.
+        call :log "INFO" "Setup completed - Starting in Production Mode"
+        call :start_production_mode
+    ) else (
+        call :log "ERROR" "Setup failed"
         goto error_exit
     )
-    
-    echo.
-    set /p "start_now=Setup completed. Start the application now? (y/n): "
-    if /i "%start_now%"=="y" (
-        set "mode=production"
-        goto mode_run
-    )
-    goto normal_exit
+)
 
-:mode_reset
-    call :handle_reset_mode
-    goto normal_exit
-
-:mode_health
-    call :run_health_check
-    goto normal_exit
-
-:mode_run
-    REM Check if enterprise setup is required
-    if not "%mode%"=="simple" (
-        call :check_enterprise_setup
-        if errorlevel 1 (
-            call :log "WARN" "Enterprise setup required for %mode% mode"
-            echo.
-            set /p "run_setup=Run enterprise setup now? (y/n): "
-            if /i "!run_setup!"=="y" (
-                call :run_enterprise_setup
-                if errorlevel 1 (
-                    call :log "ERROR" "Setup failed. Falling back to simple mode."
-                    set "mode=simple"
-                )
-            ) else (
-                call :log "INFO" "Falling back to simple mode"
-                set "mode=simple"
-            )
-        )
-    )
-    
-    REM Run health check
-    call :run_health_check
-    if errorlevel 1 (
-        call :log "WARN" "Some health checks failed, but continuing..."
-    )
-    
-    REM Start application
-    call :start_application "%mode%" "%port%"
-    goto normal_exit
+goto normal_exit
 
 :show_help
     echo Usage: %~n0 [OPTIONS]
     echo Options:
-    echo   --mode=MODE          Set startup mode (production^|development^|demo^|setup^|reset^|health^|simple)
     echo   --port=PORT          Set application port (default: 8501)
-    echo   --non-interactive    Skip interactive prompts
     echo   --help              Show this help message
+    echo.
+    echo Zenith AI automatically detects setup state:
+    echo   - If enterprise setup is not complete: Runs interactive setup
+    echo   - If enterprise setup is complete: Starts in Production Mode
     goto normal_exit
 
 :print_banner
@@ -169,41 +100,30 @@ goto error_exit
     echo.
     goto :eof
 
-:show_startup_menu
-    echo Select startup mode:
-    echo 1) 🏢 Production Mode (Enterprise)
-    echo 2) 🛠️  Development Mode (Enhanced)
-    echo 3) 🎭 Demo Mode (Sample Data)
-    echo 4) ⚙️  Setup Mode (First-time Configuration)
-    echo 5) 🔄 Reset Mode (System Reset)
-    echo 6) 📊 Health Check Only
-    echo 7) 🔧 Simple Mode (Legacy Interface)
-    echo.
+:run_interactive_setup
+    call :log "INFO" "Starting interactive enterprise setup..."
     
-    :menu_loop
-    set /p "choice=Enter your choice (1-7): "
-    if "%choice%"=="1" goto choice_done
-    if "%choice%"=="2" goto choice_done
-    if "%choice%"=="3" goto choice_done
-    if "%choice%"=="4" goto choice_done
-    if "%choice%"=="5" goto choice_done
-    if "%choice%"=="6" goto choice_done
-    if "%choice%"=="7" goto choice_done
-    call :log "WARN" "Invalid choice. Please enter 1-7."
-    goto menu_loop
+    %PYTHON_CMD% run_interactive_setup.py
     
-    :choice_done
-    set "menu_choice=%choice%"
-    goto :eof
+    if errorlevel 1 (
+        call :log "ERROR" "Interactive setup failed"
+        exit /b 1
+    ) else (
+        call :log "INFO" "Interactive setup completed successfully"
+        exit /b 0
+    )
 
-:set_mode_from_choice
-    if "%menu_choice%"=="1" set "mode=production"
-    if "%menu_choice%"=="2" set "mode=development"
-    if "%menu_choice%"=="3" set "mode=demo"
-    if "%menu_choice%"=="4" set "mode=setup"
-    if "%menu_choice%"=="5" set "mode=reset"
-    if "%menu_choice%"=="6" set "mode=health"
-    if "%menu_choice%"=="7" set "mode=simple"
+:start_production_mode
+    call :log "INFO" "Starting in Production Mode..."
+    
+    REM Run quick health check
+    call :run_health_check
+    if errorlevel 1 (
+        call :log "WARN" "Some health checks failed, but continuing..."
+    )
+    
+    REM Start application
+    call :start_application "production" "%port%"
     goto :eof
 
 :check_system_requirements
@@ -270,9 +190,15 @@ goto error_exit
 
 :setup_virtual_environment
     if exist "venv\Scripts\activate.bat" (
-        call :log "INFO" "Virtual environment detected, using system Python to avoid path conflicts"
-        REM Temporarily skip venv activation to avoid path issues
-        REM call venv\Scripts\activate.bat
+        call :log "INFO" "Activating virtual environment..."
+        call venv\Scripts\activate.bat
+        if errorlevel 1 (
+            call :log "WARN" "Failed to activate virtual environment, using system Python"
+        ) else (
+            call :log "INFO" "Virtual environment activated successfully"
+            REM Update Python command to use activated environment
+            set "PYTHON_CMD=python"
+        )
     ) else (
         call :log "WARN" "Virtual environment not found, using system Python"
         call :log "INFO" "Consider creating a virtual environment: %PYTHON_CMD% -m venv venv"
@@ -441,23 +367,13 @@ goto error_exit
     set "app_mode=%~1"
     set "app_port=%~2"
     if "%app_port%"=="" set "app_port=8501"
-    set "interface=src\ui\simple_chat_app.py"
     
-    if "%app_mode%"=="production" (
-        call :log "INFO" "Starting in Production Mode..."
+    REM Use enhanced interface if enterprise setup is complete
+    if exist "%ENTERPRISE_MARKER%" (
+        set "interface=src\ui\enhanced_streamlit_app.py"
         set "ZENITH_ENV=production"
-    )
-    if "%app_mode%"=="development" (
-        call :log "INFO" "Starting in Development Mode..."
-        set "ZENITH_ENV=development"
-        set "ZENITH_DEBUG=true"
-    )
-    if "%app_mode%"=="demo" (
-        call :log "INFO" "Starting in Demo Mode..."
-        set "ZENITH_ENV=demo"
-    )
-    if "%app_mode%"=="simple" (
-        call :log "INFO" "Starting in Simple Mode (Legacy)..."
+    ) else (
+        set "interface=src\ui\simple_chat_app.py"
     )
     
     echo.

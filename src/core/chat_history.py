@@ -9,8 +9,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 import json
 
-from ..utils.logger import get_logger
-from ..core.qdrant_manager import get_qdrant_client
+from src.utils.logger import get_logger
+from src.core.qdrant_manager import get_qdrant_client
 
 logger = get_logger(__name__)
 

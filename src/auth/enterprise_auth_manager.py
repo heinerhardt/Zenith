@@ -13,14 +13,20 @@ from enum import Enum
 import secrets
 import ipaddress
 
-from .models import User, UserSession, UserRole, UserRegistrationRequest, UserLoginRequest
-from ..utils.enterprise_security import (
+from src.auth.models import User, UserSession, UserRole, UserRegistrationRequest, UserLoginRequest
+from src.utils.enterprise_security import (
     EnterpriseSecurityManager, get_enterprise_security_manager,
-    PasswordPolicy, UserRole as EnterpriseUserRole
+    PasswordPolicy
 )
-from ..utils.database_security import DatabaseSecurityManager, secure_database_connection
-from ..database.enterprise_schema import EnterpriseDatabase
-from ..utils.logger import get_logger
+from src.database.enterprise_schema import UserRole as EnterpriseUserRole
+from src.utils.database_security import (
+    validate_database_path,
+    check_database_connection,
+    sanitize_database_settings,
+    secure_sqlite_connection
+)
+from src.database.enterprise_schema import EnterpriseDatabase
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -59,14 +65,13 @@ class EnterpriseUserStore:
     def __init__(self, database_path: str):
         """Initialize enterprise user store"""
         self.database_path = database_path
-        self.security_manager = DatabaseSecurityManager()
         
         logger.info(f"Initialized enterprise user store with database: {database_path}")
     
     def create_user(self, user_data: Dict[str, Any]) -> Optional[str]:
         """Create a new user and return user UUID"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 user_uuid = str(uuid.uuid4())
                 
                 conn.execute("""
@@ -96,7 +101,7 @@ class EnterpriseUserStore:
     def get_user_by_id(self, user_id: Union[str, int]) -> Optional[Dict[str, Any]]:
         """Get user by ID (UUID or integer)"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 # Try by UUID first, then by integer ID
                 if isinstance(user_id, str):
                     cursor = conn.execute("""
@@ -125,7 +130,7 @@ class EnterpriseUserStore:
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT u.*, r.name as role_name, r.permissions 
                     FROM users u 
@@ -145,7 +150,7 @@ class EnterpriseUserStore:
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT u.*, r.name as role_name, r.permissions 
                     FROM users u 
@@ -165,7 +170,7 @@ class EnterpriseUserStore:
     def update_user(self, user_uuid: str, updates: Dict[str, Any]) -> bool:
         """Update user information"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 # Build dynamic update query
                 set_clauses = []
                 values = []
@@ -211,7 +216,7 @@ class EnterpriseUserStore:
     def update_login_attempt(self, username: str, success: bool, ip_address: str = None) -> None:
         """Update login attempt tracking"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 if success:
                     # Reset failed attempts on successful login
                     conn.execute("""
@@ -249,7 +254,7 @@ class EnterpriseUserStore:
     def is_account_locked(self, username: str) -> bool:
         """Check if account is locked"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT locked_until FROM users 
                     WHERE username = ? AND locked_until > CURRENT_TIMESTAMP
@@ -264,7 +269,7 @@ class EnterpriseUserStore:
     def get_role_id(self, role_name: str) -> Optional[int]:
         """Get role ID by name"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("SELECT id FROM roles WHERE name = ?", (role_name,))
                 row = cursor.fetchone()
                 return row[0] if row else None
@@ -276,7 +281,7 @@ class EnterpriseUserStore:
     def list_users(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """List users with pagination"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 cursor = conn.execute("""
                     SELECT u.*, r.name as role_name, r.permissions 
                     FROM users u 
@@ -337,7 +342,7 @@ class EnterpriseAuditLogger:
                       details: Optional[Dict[str, Any]] = None, error_message: Optional[str] = None):
         """Log authentication event"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 event_id = str(uuid.uuid4())
                 
                 conn.execute("""
@@ -361,7 +366,7 @@ class EnterpriseAuditLogger:
                           ip_address: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
         """Log security event"""
         try:
-            with secure_database_connection(self.database_path) as conn:
+            with secure_sqlite_connection(self.database_path) as conn:
                 event_id = str(uuid.uuid4())
                 
                 conn.execute("""
@@ -599,7 +604,7 @@ class EnterpriseAuthenticationManager:
         )
         
         # Store session in database
-        with secure_database_connection(self.database_path) as conn:
+        with secure_sqlite_connection(self.database_path) as conn:
             conn.execute("""
                 INSERT INTO user_sessions 
                 (session_id, user_id, token_hash, ip_address, user_agent, expires_at)

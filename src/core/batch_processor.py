@@ -20,7 +20,7 @@ from .config import config
 from .minio_client import MinIOClient
 from .pdf_processor import PDFProcessor
 from .vector_store import VectorStore
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -161,9 +161,11 @@ install_python_dependencies() {
 
 # Ensure Python dependencies are available
 ensure_python_dependencies() {
+    local is_interactive="${1:-true}"
+    
     if ! check_python_dependencies; then
         echo ""
-        if [ "$interactive" = true ]; then
+        if [ "$is_interactive" = true ]; then
             read -p "Install missing dependencies automatically? (y/n): " install_deps
             if [[ "$install_deps" =~ ^[Yy]$ ]]; then
                 install_python_dependencies
@@ -172,6 +174,9 @@ ensure_python_dependencies() {
                     if ! check_python_dependencies; then
                         log "WARN" "Some dependencies may still be missing"
                     fi
+                else
+                    log "ERROR" "Dependency installation failed"
+                    log "INFO" "Please install manually with: pip install -r requirements.txt"
                 fi
             else
                 log "WARN" "Proceeding with potentially missing dependencies"
@@ -179,7 +184,16 @@ ensure_python_dependencies() {
             fi
         else
             log "INFO" "Non-interactive mode: Installing dependencies automatically..."
-            install_python_dependencies
+            if install_python_dependencies; then
+                log "INFO" "Dependencies installed successfully"
+                if ! check_python_dependencies; then
+                    log "WARN" "Some dependencies may still be missing after installation"
+                fi
+            else
+                log "ERROR" "Failed to install dependencies automatically"
+                log "INFO" "Please install manually with: pip install -r requirements.txt"
+                return 1
+            fi
         fi
         echo ""
     fi
@@ -196,17 +210,73 @@ check_enterprise_setup() {
     fi
 }
 
-# Run enterprise setup
-run_enterprise_setup() {
-    log "INFO" "Starting enterprise setup..."
+# Check if interactive setup is needed
+check_setup_needed() {
+    # Check for database and FIRST_SETUP flag
+    if python -c "
+import sys, sqlite3
+from pathlib import Path
+sys.path.insert(0, 'src')
+
+try:
+    # Check database exists and has proper setup
+    db_path = Path('./data/enterprise/zenith.db')
+    if not db_path.exists():
+        sys.exit(1)  # Setup needed
     
-    if python run_enterprise_setup.py; then
-        log "INFO" "Enterprise setup completed successfully"
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    # Check for system_settings table
+    cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='system_settings'\")
+    if not cursor.fetchone():
+        conn.close()
+        sys.exit(1)  # Setup needed
+    
+    # Check FIRST_SETUP flag
+    cursor.execute(\"SELECT value FROM system_settings WHERE key='FIRST_SETUP'\")
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result and result[0] == 'False':
+        sys.exit(0)  # Setup complete
+    else:
+        sys.exit(1)  # Setup needed
+
+except Exception:
+    sys.exit(1)  # Setup needed
+" >/dev/null 2>&1; then
+        return 1  # Setup NOT needed (exit 0 from Python = setup complete)
+    else
+        return 0  # Setup needed (exit 1 from Python = setup needed)
+    fi
+}
+
+# Run interactive enterprise setup
+run_interactive_setup() {
+    log "INFO" "Starting interactive enterprise setup..."
+    
+    # Try interactive setup first
+    if python run_interactive_setup.py; then
+        log "INFO" "Interactive setup completed successfully"
         return 0
     else
-        log "ERROR" "Enterprise setup failed"
-        return 1
+        log "WARN" "Interactive setup failed, trying CLI fallback..."
+        
+        # Fallback to CLI setup
+        if python run_enterprise_setup.py; then
+            log "INFO" "CLI setup completed successfully"
+            return 0
+        else
+            log "ERROR" "Both interactive and CLI setup failed"
+            return 1
+        fi
     fi
+}
+
+# Run enterprise setup (legacy compatibility)
+run_enterprise_setup() {
+    run_interactive_setup
 }
 
 # Comprehensive health check
@@ -437,7 +507,7 @@ main() {
     setup_virtual_environment
     
     # Ensure Python dependencies are available
-    ensure_python_dependencies
+    ensure_python_dependencies "$interactive"
     
     # Interactive mode selection if not specified
     if [ -z "$mode" ] && [ "$interactive" = true ]; then
@@ -481,8 +551,19 @@ main() {
             ;;
             
         "production"|"development"|"demo"|"simple")
-            # Check if enterprise setup is required
-            if [ "$mode" != "simple" ] && ! check_enterprise_setup; then
+            # Auto-detect if interactive setup is needed
+            if [ "$mode" != "simple" ] && check_setup_needed; then
+                log "INFO" "First-time setup detected - launching interactive setup..."
+                echo ""
+                echo -e "${CYAN}🚀 Welcome to Zenith! Starting interactive setup...${NC}"
+                
+                if ! run_interactive_setup; then
+                    log "ERROR" "Setup failed. Falling back to simple mode."
+                    mode="simple"
+                else
+                    log "INFO" "Setup completed successfully! Continuing with $mode mode..."
+                fi
+            elif [ "$mode" != "simple" ] && ! check_enterprise_setup; then
                 log "WARN" "Enterprise setup required for $mode mode"
                 echo ""
                 read -p "Run enterprise setup now? (y/n): " run_setup

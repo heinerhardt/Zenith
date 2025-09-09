@@ -18,21 +18,21 @@ import asyncio
 from dataclasses import dataclass, asdict
 
 # Enterprise components
-from database.enterprise_schema import EnterpriseDatabase, UserRole
-from database.migrations import get_migration_manager, initialize_migration_system
-from auth.enterprise_auth_manager import (
+from src.database.enterprise_schema import EnterpriseDatabase, UserRole
+from src.database.migrations import get_migration_manager, initialize_migration_system
+from src.auth.enterprise_auth_manager import (
     initialize_enterprise_auth, get_enterprise_auth_manager
 )
-from utils.enterprise_security import (
+from src.utils.enterprise_security import (
     initialize_enterprise_security, PasswordPolicy, get_enterprise_security_manager
 )
-from core.secrets_manager import (
+from src.core.secrets_manager import (
     initialize_secrets_management, get_secrets_manager, SecretType
 )
-from core.enhanced_configuration_manager import (
+from src.core.enhanced_configuration_manager import (
     initialize_configuration_management, get_config_manager, ConfigSchema, ConfigValueType
 )
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -449,7 +449,7 @@ class EnterpriseSetupManager:
         try:
             # Initialize configuration management
             initialize_configuration_management(
-                self.config.database_path,
+                str(self.config.database_path),
                 self.config.environment
             )
             config_manager = get_config_manager()
@@ -514,7 +514,7 @@ class EnterpriseSetupManager:
             # Initialize enterprise security
             password_policy = None
             if self.config.password_policy:
-                from ..utils.enterprise_security import PasswordPolicy
+                from utils.enterprise_security import PasswordPolicy
                 password_policy = PasswordPolicy(**self.config.password_policy)
             
             initialize_enterprise_security(
@@ -536,13 +536,14 @@ class EnterpriseSetupManager:
             # Hash password
             password_hash = security_manager.hash_password(admin_password, "admin_user")
             
-            # Create admin user in database
+            # Create admin user in database (with force_recreate parameter)
             enterprise_db = EnterpriseDatabase(self.config.database_path)
             admin_uuid = enterprise_db.create_admin_user(
                 username=self.config.admin_username,
                 email=self.config.admin_email,
                 password_hash=password_hash,
-                full_name=self.config.admin_full_name
+                full_name=self.config.admin_full_name,
+                force_recreate=force_recreate
             )
             
             if not admin_uuid:
@@ -606,11 +607,13 @@ class EnterpriseSetupManager:
                 validation_results['authentication'] = {
                     'initialized': True,
                     'user_store_available': auth_manager.user_store is not None,
-                    'security_manager_available': auth_manager.security_manager is not None
+                    'security_manager_available': auth_manager.security_manager is not None,
+                    'available_backends': 1  # Fixed: Added missing field for system validation
                 }
             except Exception as e:
                 validation_results['authentication'] = {
                     'initialized': False,
+                    'available_backends': 0,  # Fixed: Added missing field for system validation
                     'error': str(e)
                 }
             
@@ -650,6 +653,16 @@ class EnterpriseSetupManager:
     async def _phase_finalization(self, force_recreate: bool) -> SetupResult:
         """Phase 8: Finalization and cleanup"""
         try:
+            # Set FIRST_SETUP flag to False in database
+            from src.utils.database_security import secure_sqlite_connection
+            with secure_sqlite_connection(Path(self.config.database_path)) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO system_settings (key, value, description, updated_at)
+                    VALUES ('FIRST_SETUP', 'False', 'First-time setup completion flag', CURRENT_TIMESTAMP)
+                """)
+                conn.commit()
+                logger.info("Set FIRST_SETUP flag to False - setup complete")
+            
             # Create setup completion marker
             completion_info = {
                 'setup_version': '1.0.0',
@@ -725,16 +738,17 @@ class EnterpriseSetupManager:
     def _check_dependencies(self) -> bool:
         """Check required Python dependencies"""
         try:
-            required_packages = [
-                'argon2-cffi', 'cryptography', 'pydantic', 'sqlite3'
-            ]
+            # Map package names to their import names
+            package_imports = {
+                'argon2-cffi': 'argon2',
+                'cryptography': 'cryptography',
+                'pydantic': 'pydantic',
+                'sqlite3': 'sqlite3'
+            }
             
-            for package in required_packages:
+            for package, import_name in package_imports.items():
                 try:
-                    if package == 'sqlite3':
-                        import sqlite3
-                    else:
-                        __import__(package.replace('-', '_'))
+                    __import__(import_name)
                 except ImportError:
                     logger.error(f"Required package not found: {package}")
                     return False

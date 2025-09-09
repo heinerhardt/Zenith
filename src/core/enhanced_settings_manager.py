@@ -35,8 +35,8 @@ import threading
 
 from .qdrant_manager import get_qdrant_client
 from .config import config
-from ..auth.models import SystemSettings
-from ..utils.logger import get_logger
+from src.auth.models import SystemSettings
+from src.utils.logger import get_logger
 from qdrant_client.http import models
 
 logger = get_logger(__name__)
@@ -169,7 +169,7 @@ class EnhancedSettingsManager:
     
     def _create_default_settings_from_env(self) -> SystemSettings:
         """Create default settings from environment configuration"""
-        from ..core.config import config
+        from src.core.config import config
         
         settings = SystemSettings()
         
@@ -209,7 +209,7 @@ class EnhancedSettingsManager:
     
     def _apply_env_overrides(self, settings: SystemSettings) -> SystemSettings:
         """Apply environment overrides to existing settings"""
-        from ..core.config import config
+        from src.core.config import config
         
         # Update API keys and endpoints from environment if not set in admin
         if not settings.openai_api_key and config.openai_api_key:
@@ -244,7 +244,7 @@ class EnhancedSettingsManager:
     
     def get_effective_chat_provider(self, settings: SystemSettings = None) -> str:
         """Get effective chat provider respecting explicit provider selection"""
-        from ..core.config import config
+        from src.core.config import config
         
         if settings is None:
             settings = self._current_settings
@@ -277,7 +277,7 @@ class EnhancedSettingsManager:
     
     def get_effective_embedding_provider(self, settings: SystemSettings = None) -> str:
         """Get effective embedding provider respecting explicit provider selection"""
-        from ..core.config import config
+        from src.core.config import config
         
         if settings is None:
             settings = self._current_settings
@@ -310,7 +310,7 @@ class EnhancedSettingsManager:
     
     def is_ollama_enabled_effective(self, settings: SystemSettings = None) -> bool:
         """Check if Ollama is effectively enabled (admin OR .env)"""
-        from ..core.config import config
+        from src.core.config import config
         
         if settings is None:
             settings = self._current_settings

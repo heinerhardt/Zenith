@@ -12,16 +12,25 @@ from typing import Optional, Dict, Any, Tuple, List, Union
 from enum import Enum
 import json
 
-# Argon2 for enterprise password hashing
-from argon2 import PasswordHasher, hash_password_raw
-from argon2.exceptions import VerifyMismatchError, HashingError
+# Argon2 for enterprise password hashing - with safe import handling
+try:
+    from argon2 import PasswordHasher, hash_password_raw
+    from argon2.exceptions import VerifyMismatchError, HashingError
+    ARGON2_AVAILABLE = True
+except ImportError:
+    # Fallback - will be caught by dependency check
+    PasswordHasher = None
+    hash_password_raw = None
+    VerifyMismatchError = Exception
+    HashingError = Exception
+    ARGON2_AVAILABLE = False
 
 # Backward compatibility with existing bcrypt
 import bcrypt
 
 # Existing security utilities
 from .security import JWTManager, SessionManager, RateLimiter, SecurityValidator
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
