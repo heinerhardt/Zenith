@@ -59,9 +59,8 @@ from src.utils.database_security import (
     validate_database_path, secure_sqlite_connection, 
     sanitize_database_settings, check_database_connection
 )
-from src.auth.auth_manager import (
-    AuthenticationManager, init_auth_session, get_current_user_from_session,
-    require_authentication, require_admin, logout_user_session
+from src.auth.enterprise_auth_manager import (
+    EnterpriseAuthenticationManager, AuthenticationResult
 )
 from src.auth.models import UserRole, UserRegistrationRequest, UserLoginRequest
 from src.utils.helpers import format_file_size, format_duration
@@ -205,10 +204,10 @@ def initialize_session_state():
     
     if "auth_manager" not in st.session_state:
         try:
-            qdrant_client = get_qdrant_client().get_client()
-            st.session_state.auth_manager = AuthenticationManager(
-                qdrant_client=qdrant_client,
-                secret_key=config.jwt_secret_key
+            # Use enterprise database path
+            database_path = "data/enterprise/zenith.db"
+            st.session_state.auth_manager = EnterpriseAuthenticationManager(
+                database_path=database_path
             )
         except Exception as e:
             logger.error(f"Failed to initialize auth manager: {e}")

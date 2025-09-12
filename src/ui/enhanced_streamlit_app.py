@@ -24,9 +24,8 @@ from src.core.enhanced_chat_engine import EnhancedChatEngine
 from src.core.pdf_processor import PDFProcessor
 from src.core.enhanced_settings_manager import get_enhanced_settings_manager
 from src.core.chat_history import get_chat_history_manager, ChatSession, ChatMessage
-from src.auth.auth_manager import (
-    AuthenticationManager, init_auth_session, get_current_user_from_session,
-    require_authentication, require_admin, logout_user_session
+from src.auth.enterprise_auth_manager import (
+    EnterpriseAuthenticationManager, AuthenticationResult
 )
 from src.auth.models import UserRole, UserRegistrationRequest, UserLoginRequest
 from src.utils.helpers import format_file_size, format_duration
@@ -594,7 +593,14 @@ class ZenithAuthenticatedApp:
     def initialize_session_state(self):
         """Initialize Streamlit session state"""
         # Authentication state
-        init_auth_session()
+        if 'authenticated' not in st.session_state:
+            st.session_state.authenticated = False
+        if 'user_token' not in st.session_state:
+            st.session_state.user_token = None
+        if 'user_info' not in st.session_state:
+            st.session_state.user_info = None
+        if 'auth_manager' not in st.session_state:
+            st.session_state.auth_manager = None
         
         # Core components
         if 'pdf_processor' not in st.session_state:
@@ -629,15 +635,15 @@ class ZenithAuthenticatedApp:
             st.session_state.show_admin_panel = False
     
     def initialize_auth(self):
-        """Initialize authentication manager"""
+        """Initialize enterprise authentication manager"""
         if 'auth_manager' not in st.session_state or st.session_state.auth_manager is None:
             try:
-                qdrant_client = get_qdrant_client().get_client()
-                st.session_state.auth_manager = AuthenticationManager(
-                    qdrant_client=qdrant_client,
-                    secret_key=config.jwt_secret_key
+                # Use enterprise database path
+                database_path = "data/enterprise/zenith.db"
+                st.session_state.auth_manager = EnterpriseAuthenticationManager(
+                    database_path=database_path
                 )
-                logger.info("Authentication manager initialized successfully")
+                logger.info("Enterprise authentication manager initialized successfully")
             except Exception as e:
                 st.error(f"Failed to initialize authentication: {e}")
                 logger.error(f"Authentication initialization error: {e}")
@@ -733,24 +739,23 @@ class ZenithAuthenticatedApp:
                     user_agent = "Streamlit App"
                     
                     try:
-                        success, message, token = st.session_state.auth_manager.login_user(
+                        result, message, user_data = st.session_state.auth_manager.authenticate_user(
                             login_request, ip_address, user_agent
                         )
                         
-                        if success:
+                        if result == AuthenticationResult.SUCCESS:
                             # Store session information
                             st.session_state.authenticated = True
-                            st.session_state.user_token = token
+                            st.session_state.user_token = user_data.get('token') if user_data else None
                             
-                            # Get user info
-                            user = st.session_state.auth_manager.get_current_user(token)
-                            if user:
+                            # Store user info from enterprise auth
+                            if user_data:
                                 st.session_state.user_info = {
-                                    'id': user.id,
-                                    'username': user.username,
-                                    'email': user.email,
-                                    'role': user.role.value,
-                                    'full_name': user.full_name
+                                    'id': user_data.get('uuid'),
+                                    'username': user_data.get('username'),
+                                    'email': user_data.get('email'),
+                                    'role': user_data.get('role_name', 'user'),
+                                    'full_name': user_data.get('full_name')
                                 }
                             
                             st.success("✅ Login successful! Redirecting...")
@@ -884,7 +889,11 @@ class ZenithAuthenticatedApp:
             if st.session_state.get('user_token'):
                 st.session_state.auth_manager.logout_user(st.session_state.user_token)
             
-            logout_user_session()
+            # Clear session state
+            st.session_state.authenticated = False
+            st.session_state.user_token = None
+            st.session_state.user_info = None
+            
             st.success("Logged out successfully")
             time.sleep(1)
             st.rerun()
